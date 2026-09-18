@@ -3383,6 +3383,7 @@
             if (!isoStr) return '-';
             try {
                 const date = new Date(isoStr);
+                if (isNaN(date.getTime())) return isoStr;
                 return date.toLocaleDateString('id-ID', {
                     day: 'numeric',
                     month: 'short',
