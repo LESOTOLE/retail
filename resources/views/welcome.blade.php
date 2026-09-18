@@ -41,16 +41,29 @@
         .glow-emerald {
             box-shadow: 0 0 40px -10px rgba(16, 185, 129, 0.25);
         }
+        [x-cloak] {
+            display: none !important;
+        }
     </style>
 
     <!-- Alpine.js CDN -->
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.5/dist/cdn.min.js"></script>
     <script>
         document.addEventListener('alpine:init', () => {
+            // Helper for safe JSON localStorage retrieval
+            function safeJsonParse(key, fallback) {
+                try {
+                    const item = localStorage.getItem(key);
+                    return item ? JSON.parse(item) : fallback;
+                } catch (e) {
+                    return fallback;
+                }
+            }
+
             // --- AUTH STORE ---
             Alpine.store('auth', {
                 token: localStorage.getItem('motovault_token') || null,
-                user: JSON.parse(localStorage.getItem('motovault_user') || 'null'),
+                user: safeJsonParse('motovault_user', null),
                 isAuthModalOpen: false,
                 authTab: 'login', // 'login' or 'register'
                 authError: '',
@@ -99,7 +112,7 @@
 
             // --- CART STORE ---
             Alpine.store('cart', {
-                items: JSON.parse(localStorage.getItem('motovault_cart') || '[]'),
+                items: safeJsonParse('motovault_cart', []),
                 isDrawerOpen: false,
                 isCheckoutOpen: false,
                 isOrderTrackerOpen: false,
@@ -141,6 +154,10 @@
                 },
 
                 addItem(variant) {
+                    if (!variant || variant.stock <= 0) {
+                        alert('Stok habis');
+                        return;
+                    }
                     const existing = this.items.find(i => i.sku === variant.sku);
                     if (existing) {
                         if (existing.quantity < variant.stock) {
@@ -170,6 +187,7 @@
                     const item = this.items.find(i => i.sku === sku);
                     if (!item) return;
                     const newQty = parseInt(qty);
+                    if (isNaN(newQty)) return;
                     if (newQty <= 0) {
                         this.removeItem(sku);
                     } else if (newQty <= item.stock) {
@@ -217,19 +235,56 @@
             </div>
 
             <!-- Center Navigation Links -->
-            <nav class="hidden md:flex items-center space-x-6 text-xs font-semibold text-gray-300">
-                <a href="#ai-diagnostic" class="hover:text-emerald-400 transition">AI Diagnosa RAG</a>
+            <nav class="hidden lg:flex items-center space-x-6 text-xs font-semibold text-gray-300">
                 <a href="#katalog-produk" class="hover:text-emerald-400 transition">Katalog Terverifikasi</a>
+                <a href="#ai-diagnostic" class="hover:text-emerald-400 transition">AI Diagnosa RAG</a>
                 <a href="#logistik-3pl" class="hover:text-emerald-400 transition">3PL Cek Ongkir & Resi</a>
                 <a href="#gudang-cabang" class="hover:text-emerald-400 transition">Routing Cabang</a>
                 <a href="#api-reference" class="hover:text-emerald-400 transition">REST API Docs</a>
             </nav>
 
-            <!-- Actions: Separate POS Cashier Button -->
-            <div class="flex items-center space-x-3">
-                <a href="/pos" target="_blank" class="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-black text-xs font-extrabold shadow-lg shadow-emerald-500/20 transition flex items-center space-x-1.5 active:scale-95">
-                    <span>💳 Buka Terminal POS Kasir</span>
-                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <!-- Actions: Garage Indicator, Cart Button, Auth Button, POS Cashier Button -->
+            <div class="flex items-center space-x-2 sm:space-x-3">
+                <!-- My Garage Quick Indicator -->
+                <button 
+                    @click="document.getElementById('garage-bar')?.scrollIntoView({behavior: 'smooth'})"
+                    x-show="$store.garage.selectedVehicleName"
+                    x-cloak
+                    class="hidden sm:inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs font-semibold hover:bg-emerald-500/25 transition cursor-pointer"
+                    title="Motor aktif di Garasi">
+                    <span>🏍️</span>
+                    <span x-text="$store.garage.selectedVehicleName" class="max-w-[120px] truncate"></span>
+                </button>
+
+                <!-- Customer Auth Button -->
+                <button 
+                    @click="$store.auth.isAuthModalOpen = true"
+                    class="inline-flex items-center space-x-1.5 px-3 py-2 rounded-xl bg-gray-900/80 hover:bg-gray-800 border border-gray-700/80 text-gray-200 hover:text-white text-xs font-semibold transition active:scale-95 cursor-pointer">
+                    <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+                    </svg>
+                    <span x-text="$store.auth.isAuthenticated ? ($store.auth.user?.name || 'Pelanggan') : 'Masuk / Daftar'"></span>
+                </button>
+
+                <!-- Cart Button with Count Badge -->
+                <button 
+                    @click="$store.cart.isDrawerOpen = true"
+                    class="relative p-2 rounded-xl bg-gray-900/80 hover:bg-gray-800 border border-gray-700/80 text-gray-300 hover:text-white transition flex items-center justify-center active:scale-95 cursor-pointer"
+                    aria-label="Keranjang Belanja">
+                    <svg class="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"/>
+                    </svg>
+                    <span 
+                        x-show="$store.cart.count > 0"
+                        x-text="$store.cart.count"
+                        x-cloak
+                        class="absolute -top-1.5 -right-1.5 bg-emerald-500 text-black font-black text-[10px] w-5 h-5 rounded-full flex items-center justify-center shadow-lg shadow-emerald-500/50"></span>
+                </button>
+
+                <!-- POS Cashier Button -->
+                <a href="/pos" target="_blank" class="px-3 sm:px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-black text-xs font-extrabold shadow-lg shadow-emerald-500/20 transition flex items-center space-x-1.5 active:scale-95">
+                    <span>💳 <span class="hidden sm:inline">Buka Terminal POS Kasir</span><span class="sm:hidden">POS</span></span>
+                    <svg class="w-3.5 h-3.5 hidden sm:inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
                     </svg>
                 </a>
@@ -276,6 +331,315 @@
                 </div>
             </div>
         </div>
+    </section>
+
+    <!-- "My Garage" Filter Bar -->
+    <div id="garage-bar" class="sticky top-18 z-40 bg-[#070b12]/95 backdrop-blur-md border-y border-gray-800/80 py-3.5 px-4 sm:px-6 lg:px-8 shadow-2xl transition-all">
+        <div class="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-3">
+            
+            <!-- Motor Selector -->
+            <div class="flex items-center space-x-3 w-full md:w-auto">
+                <div class="flex items-center space-x-2 text-white font-bold text-xs sm:text-sm whitespace-nowrap">
+                    <span class="flex items-center justify-center w-8 h-8 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">🏍️</span>
+                    <span>Garasi Saya:</span>
+                </div>
+
+                <div class="flex-1 sm:w-80">
+                    <select 
+                        :value="$store.garage.selectedVehicleId"
+                        @change="
+                            const sel = $event.target;
+                            const opt = sel.options[sel.selectedIndex];
+                            if (sel.value) {
+                                const motorName = opt.getAttribute('data-name') || opt.text;
+                                $store.garage.setVehicle(sel.value, motorName);
+                            } else {
+                                $store.garage.clearVehicle();
+                            }
+                        "
+                        class="w-full bg-gray-900 border border-gray-700/80 text-gray-200 text-xs rounded-xl px-3 py-2.5 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition cursor-pointer">
+                        <option value="">-- Pilih Model Motor Anda --</option>
+                        @foreach($vehicles as $v)
+                            <option value="{{ $v->id }}" data-name="{{ $v->brand }} {{ $v->model }}" :selected="$store.garage.selectedVehicleId == {{ $v->id }}">
+                                {{ $v->brand }} {{ $v->model }} ({{ $v->year_start }}{{ $v->year_end ? '-'.$v->year_end : '+' }})
+                            </option>
+                        @endforeach
+                    </select>
+                </div>
+            </div>
+
+            <!-- Active Status Banner or Prompt -->
+            <div class="w-full md:w-auto flex items-center justify-between md:justify-end gap-2 text-xs">
+                <div x-show="$store.garage.selectedVehicleId" x-cloak class="flex items-center gap-2 bg-emerald-950/70 border border-emerald-500/40 text-emerald-300 px-4 py-2 rounded-xl shadow-sm glow-emerald">
+                    <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                    <span class="text-xs">Motor Anda: <strong class="text-white" x-text="$store.garage.selectedVehicleName"></strong> — Menampilkan kecocokan suku cadang terverifikasi</span>
+                    <button 
+                        type="button"
+                        @click="$store.garage.clearVehicle()" 
+                        class="ml-2 px-2.5 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 hover:text-white font-bold transition text-[11px] cursor-pointer"
+                        title="Hapus / ganti pilihan motor">
+                        ✕ Ganti
+                    </button>
+                </div>
+
+                <div x-show="!$store.garage.selectedVehicleId" class="text-gray-400 text-xs italic flex items-center space-x-1.5 py-1">
+                    <span>💡</span>
+                    <span>Pilih motor Anda untuk melihat indikator kecocokan suku cadang secara instan.</span>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- SECTION: Dedicated Product Catalog Grid -->
+    <section id="katalog-produk" 
+        x-data="{
+            searchQuery: '',
+            activeCategory: 'all',
+            filterProduct(catId, name, brand) {
+                const matchesCat = (this.activeCategory === 'all' || String(this.activeCategory) === String(catId));
+                const q = this.searchQuery.toLowerCase().trim();
+                const matchesSearch = !q || name.toLowerCase().includes(q) || (brand && brand.toLowerCase().includes(q));
+                return matchesCat && matchesSearch;
+            }
+        }"
+        class="py-12 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto border-t border-gray-800/80">
+        
+        <!-- Section Header -->
+        <div class="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
+            <div>
+                <div class="inline-flex items-center space-x-2 text-xs font-bold text-emerald-400 uppercase tracking-wider mb-1">
+                    <span>🛒 Katalog Suku Cadang Terverifikasi</span>
+                </div>
+                <h2 class="text-2xl sm:text-3xl font-black text-white tracking-tight">
+                    Suku Cadang Asli & Bergaransi Presisi
+                </h2>
+                <p class="text-xs sm:text-sm text-gray-400 mt-1">
+                    Didukung sistem kompatibilitas deterministik agar suku cadang 100% pas dan tidak salah beli.
+                </p>
+            </div>
+
+            <!-- Search Input -->
+            <div class="relative w-full md:w-80">
+                <input 
+                    type="text" 
+                    x-model="searchQuery" 
+                    placeholder="Cari sparepart, merk, atau kode..." 
+                    class="w-full bg-gray-900/90 border border-gray-800 rounded-2xl pl-10 pr-9 py-2.5 text-xs text-gray-200 placeholder-gray-500 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition">
+                <svg class="w-4 h-4 text-gray-400 absolute left-3.5 top-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                </svg>
+                <button 
+                    x-show="searchQuery" 
+                    @click="searchQuery = ''" 
+                    class="absolute right-3 top-2.5 text-gray-400 hover:text-white text-xs cursor-pointer">
+                    ✕
+                </button>
+            </div>
+        </div>
+
+        <!-- Category Pills Filter -->
+        <div class="flex items-center gap-2 overflow-x-auto pb-4 mb-6 scrollbar-none border-b border-gray-800/80">
+            <button 
+                type="button"
+                @click="activeCategory = 'all'"
+                :class="activeCategory === 'all' ? 'bg-emerald-500 text-black font-extrabold shadow-md shadow-emerald-500/20' : 'bg-gray-900/90 text-gray-300 hover:text-white border border-gray-800 hover:border-gray-700'"
+                class="px-4 py-2 rounded-xl text-xs whitespace-nowrap transition cursor-pointer font-semibold">
+                Semua Produk ({{ $products->count() }})
+            </button>
+            @foreach($categories as $cat)
+                <button 
+                    type="button"
+                    @click="activeCategory = {{ $cat->id }}"
+                    :class="activeCategory === {{ $cat->id }} ? 'bg-emerald-500 text-black font-extrabold shadow-md shadow-emerald-500/20' : 'bg-gray-900/90 text-gray-300 hover:text-white border border-gray-800 hover:border-gray-700'"
+                    class="px-4 py-2 rounded-xl text-xs whitespace-nowrap transition cursor-pointer font-semibold">
+                    {{ $cat->name }}
+                </button>
+            @endforeach
+        </div>
+
+        <!-- Products Grid -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+            @forelse($products as $product)
+                @php
+                    $compatIds = $product->compatibleVehicles->pluck('id')->values()->all();
+                    $variantsJson = $product->variants->map(function ($v) use ($product) {
+                        return [
+                            'id' => $v->id,
+                            'sku' => $v->sku,
+                            'variant_name' => $v->variant_name,
+                            'additional_price' => (float) $v->additional_price,
+                            'final_price' => (float) ($product->base_price + $v->additional_price),
+                            'stock' => (int) $v->stock,
+                            'weight_gram' => (int) ($v->weight_gram ?: ($product->weight_gram ?: 500)),
+                        ];
+                    })->values()->all();
+
+                    if (empty($variantsJson)) {
+                        $variantsJson[] = [
+                            'id' => null,
+                            'sku' => $product->slug,
+                            'variant_name' => 'Standar',
+                            'additional_price' => 0,
+                            'final_price' => (float) $product->base_price,
+                            'stock' => 0,
+                            'weight_gram' => (int) ($product->weight_gram ?: 500),
+                        ];
+                    }
+                @endphp
+
+                <div 
+                    x-data="{
+                        productId: {{ $product->id }},
+                        categoryId: {{ $product->category_id ?? 0 }},
+                        name: {{ json_encode($product->name) }},
+                        brand: {{ json_encode($product->brand ?? '') }},
+                        basePrice: {{ (float) $product->base_price }},
+                        compatibleVehicles: {{ json_encode($compatIds) }},
+                        variants: {{ json_encode($variantsJson) }},
+                        selectedVariantIndex: 0,
+
+                        get currentVariant() {
+                            return this.variants[this.selectedVariantIndex] || this.variants[0];
+                        },
+
+                        get currentPrice() {
+                            return this.currentVariant ? this.currentVariant.final_price : this.basePrice;
+                        },
+
+                        get currentStock() {
+                            return this.currentVariant ? this.currentVariant.stock : 0;
+                        },
+
+                        get isCompatible() {
+                            const garageId = $store.garage.selectedVehicleId;
+                            if (!garageId) return null;
+                            return this.compatibleVehicles.some(id => String(id) === String(garageId));
+                        },
+
+                        addToCart() {
+                            const v = this.currentVariant;
+                            if (!v || v.stock <= 0) {
+                                alert('Stok habis');
+                                return;
+                            }
+                            $store.cart.addItem({
+                                id: v.id,
+                                sku: v.sku,
+                                name: this.name,
+                                variant_name: v.variant_name,
+                                price: v.final_price,
+                                stock: v.stock,
+                                weight_gram: v.weight_gram
+                            });
+                        }
+                    }"
+                    x-show="filterProduct(categoryId, name, brand)"
+                    class="glass-panel p-5 rounded-2xl border border-gray-800/90 hover:border-emerald-500/40 transition-all flex flex-col justify-between group shadow-xl hover:shadow-emerald-500/10">
+                    
+                    <!-- Top Card Content -->
+                    <div>
+                        <!-- Brand & Category -->
+                        <div class="flex items-center justify-between gap-2 mb-3">
+                            <span class="text-[10px] font-mono font-black uppercase px-2 py-0.5 rounded-md bg-gray-800/90 border border-gray-700 text-gray-300">
+                                {{ $product->brand ?: 'Universal' }}
+                            </span>
+                            <span class="text-[11px] text-emerald-400 font-semibold">
+                                {{ $product->category?->name ?: 'Suku Cadang' }}
+                            </span>
+                        </div>
+
+                        <!-- Product Avatar Placeholder -->
+                        <div class="w-full h-32 rounded-xl bg-gray-950/60 border border-gray-800/80 flex items-center justify-center mb-3 group-hover:border-emerald-500/30 transition-colors">
+                            <div class="text-center">
+                                <div class="text-3xl mb-1">⚙️</div>
+                                <div class="text-[10px] text-gray-500 font-mono">SKU: {{ $product->variants->first()?->sku ?? $product->slug }}</div>
+                            </div>
+                        </div>
+
+                        <!-- Product Title -->
+                        <h3 class="text-sm font-bold text-white group-hover:text-emerald-300 transition-colors line-clamp-2 leading-snug">
+                            {{ $product->name }}
+                        </h3>
+
+                        <!-- Compatibility Badge -->
+                        <div class="mt-2.5 min-h-[26px] flex items-center">
+                            <template x-if="isCompatible === true">
+                                <div class="inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-emerald-500/15 border border-emerald-500/40 text-emerald-400 text-[11px] font-bold">
+                                    <span>✓ Pasti Pas untuk <span x-text="$store.garage.selectedVehicleName"></span></span>
+                                </div>
+                            </template>
+                            <template x-if="isCompatible === false">
+                                <div class="inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-400 text-[11px] font-medium">
+                                    <span>⚠️ Belum terverifikasi untuk <span x-text="$store.garage.selectedVehicleName"></span></span>
+                                </div>
+                            </template>
+                            <template x-if="isCompatible === null">
+                                <div class="text-[10px] text-gray-500 italic">
+                                    Pilih motor di Garasi untuk cek kecocokan
+                                </div>
+                            </template>
+                        </div>
+
+                        <!-- Variant Selection -->
+                        <template x-if="variants.length > 1">
+                            <div class="mt-3.5 pt-2 border-t border-gray-800/60">
+                                <label class="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Pilih Varian:</label>
+                                <select 
+                                    x-model="selectedVariantIndex"
+                                    class="w-full bg-gray-900 border border-gray-700/80 rounded-xl px-2.5 py-1.5 text-xs text-gray-200 outline-none focus:border-emerald-500 transition cursor-pointer">
+                                    <template x-for="(v, idx) in variants" :key="v.id">
+                                        <option :value="idx" x-text="`${v.variant_name} — Rp ${v.final_price.toLocaleString('id-ID')} (Stok: ${v.stock})`"></option>
+                                    </template>
+                                </select>
+                            </div>
+                        </template>
+
+                        <template x-if="variants.length === 1">
+                            <div class="mt-2 flex items-center justify-between text-[11px] text-gray-400">
+                                <span class="font-mono text-gray-400" x-text="variants[0].variant_name !== 'Default' ? variants[0].variant_name : variants[0].sku"></span>
+                                <span class="text-[11px]" :class="currentStock > 0 ? 'text-gray-300' : 'text-rose-400 font-bold'" x-text="currentStock > 0 ? `Stok: ${currentStock}` : 'Stok Habis'"></span>
+                            </div>
+                        </template>
+                    </div>
+
+                    <!-- Bottom Card Footer: Price & Add to Cart -->
+                    <div class="mt-4 pt-3 border-t border-gray-800/80 flex items-center justify-between gap-3">
+                        <div>
+                            <div class="text-[10px] text-gray-400 font-medium">Harga Satuan</div>
+                            <div class="text-base font-black text-emerald-400 font-mono" x-text="'Rp ' + currentPrice.toLocaleString('id-ID')"></div>
+                        </div>
+
+                        <button 
+                            type="button"
+                            @click="addToCart()"
+                            :disabled="currentStock <= 0"
+                            :class="currentStock <= 0 ? 'bg-gray-800 text-gray-500 cursor-not-allowed border border-gray-700' : 'bg-emerald-500 hover:bg-emerald-400 text-black hover:shadow-emerald-500/25 active:scale-95 shadow-md shadow-emerald-500/15 cursor-pointer'"
+                            class="px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all flex items-center space-x-1.5">
+                            <template x-if="currentStock > 0">
+                                <span class="flex items-center space-x-1">
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/>
+                                    </svg>
+                                    <span>Tambah</span>
+                                </span>
+                            </template>
+                            <template x-if="currentStock <= 0">
+                                <span>Habis</span>
+                            </template>
+                        </button>
+                    </div>
+
+                </div>
+            @empty
+                <div class="col-span-full text-center py-12 glass-panel rounded-2xl border border-gray-800">
+                    <div class="text-3xl mb-2">📦</div>
+                    <div class="text-white font-bold text-sm">Belum ada suku cadang terdaftar</div>
+                    <div class="text-gray-400 text-xs mt-1">Silakan tambahkan data produk melalui database seeder atau panel admin.</div>
+                </div>
+            @endforelse
+        </div>
+
     </section>
 
     <!-- SECTION 1: AI DIAGNOSTIC STUDIO & COMPATIBILITY ASSISTANT -->
@@ -351,7 +715,7 @@
             </div>
 
             <!-- Right: Verified Catalog Explorer -->
-            <div id="katalog-produk" class="lg:col-span-5 glass-panel rounded-3xl p-6 border border-gray-800 flex flex-col shadow-2xl">
+            <div id="ai-quick-catalog" class="lg:col-span-5 glass-panel rounded-3xl p-6 border border-gray-800 flex flex-col shadow-2xl">
                 <div class="flex items-center justify-between pb-4 border-b border-gray-800">
                     <div>
                         <h2 class="text-base font-bold text-white">Katalog Suku Cadang</h2>
