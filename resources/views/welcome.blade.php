@@ -120,6 +120,7 @@
                 isCheckingOut: false,
                 checkoutError: '',
                 checkoutSuccessData: null,
+                isOrderSuccessOpen: false,
 
                 // Shipping selection
                 postalCode: localStorage.getItem('motovault_postal') || '12190',
@@ -151,6 +152,19 @@
                 save() {
                     localStorage.setItem('motovault_cart', JSON.stringify(this.items));
                     if (this.postalCode) localStorage.setItem('motovault_postal', this.postalCode);
+                },
+
+                openCheckout() {
+                    this.isDrawerOpen = false;
+                    this.isCheckoutOpen = true;
+                    this.checkoutStep = 1;
+                    this.checkoutError = '';
+                    const authUser = Alpine.store('auth')?.user;
+                    if (authUser) {
+                        if (!this.recipientName) this.recipientName = authUser.name || '';
+                        if (!this.recipientEmail) this.recipientEmail = authUser.email || '';
+                        if (!this.recipientPhone && authUser.phone) this.recipientPhone = authUser.phone || '';
+                    }
                 },
 
                 addItem(variant) {
@@ -1189,13 +1203,614 @@
                     <button 
                         type="button" 
                         :disabled="$store.cart.count === 0"
-                        @click="$store.cart.isDrawerOpen = false; $store.cart.isCheckoutOpen = true; $store.cart.checkoutStep = 1"
+                        @click="$store.cart.openCheckout()"
                         :class="$store.cart.count === 0 ? 'bg-gray-800 text-gray-500 cursor-not-allowed border border-gray-700' : 'bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-black hover:shadow-emerald-500/25 active:scale-95 shadow-lg shadow-emerald-500/20 cursor-pointer'"
                         class="w-full py-3.5 rounded-xl text-xs sm:text-sm font-black transition-all flex items-center justify-center space-x-2">
                         <span>Lanjut ke Pembayaran</span>
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M14 5l7 7m0 0l-7 7m7-7H3"/>
                         </svg>
+                    </button>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- 3-Step Checkout Modal with Live 3PL Rates & Payment -->
+    <div 
+        x-show="$store.cart.isCheckoutOpen" 
+        x-cloak
+        x-init="$watch('$store.cart.isCheckoutOpen', open => {
+            if (open && $store.auth.user) {
+                if (!$store.cart.recipientName) $store.cart.recipientName = $store.auth.user.name || '';
+                if (!$store.cart.recipientEmail) $store.cart.recipientEmail = $store.auth.user.email || '';
+                if (!$store.cart.recipientPhone && $store.auth.user.phone) $store.cart.recipientPhone = $store.auth.user.phone || '';
+            }
+        })"
+        @keydown.window.escape="if (!$store.cart.isCheckingOut) $store.cart.isCheckoutOpen = false"
+        class="fixed inset-0 z-50 overflow-y-auto" 
+        role="dialog" 
+        aria-modal="true" 
+        aria-labelledby="checkout-modal-title">
+
+        <!-- Modal Backdrop -->
+        <div 
+            x-show="$store.cart.isCheckoutOpen"
+            x-transition:enter="ease-out duration-300"
+            x-transition:enter-start="opacity-0"
+            x-transition:enter-end="opacity-100"
+            x-transition:leave="ease-in duration-200"
+            x-transition:leave-start="opacity-100"
+            x-transition:leave-end="opacity-0"
+            @click="if (!$store.cart.isCheckingOut) $store.cart.isCheckoutOpen = false"
+            class="fixed inset-0 bg-black/80 backdrop-blur-md transition-opacity"></div>
+
+        <!-- Modal Dialog Container -->
+        <div class="min-h-full flex items-center justify-center p-3 sm:p-6 relative z-10">
+            <div 
+                x-show="$store.cart.isCheckoutOpen"
+                x-transition:enter="ease-out duration-300"
+                x-transition:enter-start="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+                x-transition:enter-end="opacity-100 translate-y-0 sm:scale-100"
+                x-transition:leave="ease-in duration-200"
+                x-transition:leave-start="opacity-100 translate-y-0 sm:scale-100"
+                x-transition:leave-end="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+                class="w-full max-w-2xl bg-[#0e1524] border border-gray-800 rounded-3xl shadow-2xl overflow-hidden text-gray-100 flex flex-col my-6">
+                
+                <!-- Stepper Header -->
+                <div class="px-5 py-4 sm:px-6 sm:py-5 border-b border-gray-800 bg-gray-900/70 backdrop-blur-md">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="flex items-center space-x-2.5">
+                            <span class="w-8 h-8 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">📦</span>
+                            <div>
+                                <h2 id="checkout-modal-title" class="text-base sm:text-lg font-extrabold text-white">Checkout & Pengiriman Multi-Ekspedisi</h2>
+                                <p class="text-[11px] text-gray-400">Jaminan suku cadang presisi & garansi kirim MotoVault</p>
+                            </div>
+                        </div>
+                        <button 
+                            type="button" 
+                            :disabled="$store.cart.isCheckingOut"
+                            @click="$store.cart.isCheckoutOpen = false" 
+                            class="p-1.5 rounded-xl text-gray-400 hover:text-white hover:bg-gray-800 transition cursor-pointer"
+                            aria-label="Tutup Checkout">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                            </svg>
+                        </button>
+                    </div>
+
+                    <!-- 3-Step Progress Header -->
+                    <div class="grid grid-cols-3 gap-2 text-xs">
+                        <!-- Step 1 Button/Pill -->
+                        <div 
+                            @click="if ($store.cart.checkoutStep > 1 && !$store.cart.isCheckingOut) $store.cart.checkoutStep = 1"
+                            class="flex items-center space-x-2 p-2 rounded-xl transition border cursor-pointer"
+                            :class="$store.cart.checkoutStep === 1 ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300 shadow-sm' : ($store.cart.checkoutStep > 1 ? 'bg-gray-900 border-gray-800 text-emerald-400 hover:border-gray-700' : 'bg-gray-900/40 border-gray-800/60 text-gray-500')">
+                            <div class="w-6 h-6 rounded-full flex items-center justify-center font-bold text-xs flex-shrink-0"
+                                :class="$store.cart.checkoutStep === 1 ? 'bg-emerald-500 text-black' : ($store.cart.checkoutStep > 1 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-gray-800 text-gray-400')">
+                                <template x-if="$store.cart.checkoutStep > 1">
+                                    <span>✓</span>
+                                </template>
+                                <template x-if="$store.cart.checkoutStep <= 1">
+                                    <span>1</span>
+                                </template>
+                            </div>
+                            <div class="leading-tight truncate">
+                                <div class="font-bold text-[11px] truncate">1. Alamat & Kontak</div>
+                                <div class="text-[9px] opacity-75 hidden sm:block">Data Penerima</div>
+                            </div>
+                        </div>
+
+                        <!-- Step 2 Button/Pill -->
+                        <div 
+                            @click="if ($store.cart.checkoutStep > 2 && !$store.cart.isCheckingOut) $store.cart.checkoutStep = 2"
+                            class="flex items-center space-x-2 p-2 rounded-xl transition border"
+                            :class="[
+                                $store.cart.checkoutStep === 2 ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300 shadow-sm' : ($store.cart.checkoutStep > 2 ? 'bg-gray-900 border-gray-800 text-emerald-400 hover:border-gray-700 cursor-pointer' : 'bg-gray-900/40 border-gray-800/60 text-gray-500')
+                            ]">
+                            <div class="w-6 h-6 rounded-full flex items-center justify-center font-bold text-xs flex-shrink-0"
+                                :class="$store.cart.checkoutStep === 2 ? 'bg-emerald-500 text-black' : ($store.cart.checkoutStep > 2 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-gray-800 text-gray-400')">
+                                <template x-if="$store.cart.checkoutStep > 2">
+                                    <span>✓</span>
+                                </template>
+                                <template x-if="$store.cart.checkoutStep <= 2">
+                                    <span>2</span>
+                                </template>
+                            </div>
+                            <div class="leading-tight truncate">
+                                <div class="font-bold text-[11px] truncate">2. Ekspedisi 3PL</div>
+                                <div class="text-[9px] opacity-75 hidden sm:block">Pilih Kurir & Tarif</div>
+                            </div>
+                        </div>
+
+                        <!-- Step 3 Button/Pill -->
+                        <div 
+                            class="flex items-center space-x-2 p-2 rounded-xl transition border"
+                            :class="$store.cart.checkoutStep === 3 ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300 shadow-sm' : 'bg-gray-900/40 border-gray-800/60 text-gray-500'">
+                            <div class="w-6 h-6 rounded-full flex items-center justify-center font-bold text-xs flex-shrink-0"
+                                :class="$store.cart.checkoutStep === 3 ? 'bg-emerald-500 text-black' : 'bg-gray-800 text-gray-400'">
+                                <span>3</span>
+                            </div>
+                            <div class="leading-tight truncate">
+                                <div class="font-bold text-[11px] truncate">3. Pembayaran</div>
+                                <div class="text-[9px] opacity-75 hidden sm:block">Metode & Bayar</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- STEP 1: Customer Details & Shipping Destination -->
+                <div x-show="$store.cart.checkoutStep === 1" class="p-5 sm:p-6 space-y-4">
+                    <!-- Auth State Banner -->
+                    <template x-if="$store.auth.isAuthenticated">
+                        <div class="flex items-center justify-between p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs">
+                            <div class="flex items-center space-x-2">
+                                <span>👤</span>
+                                <span>Masuk sebagai <strong class="text-white" x-text="$store.auth.user?.name"></strong> (<span x-text="$store.auth.user?.email"></span>)</span>
+                            </div>
+                            <span class="text-[10px] px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-400 font-bold">Terverifikasi</span>
+                        </div>
+                    </template>
+                    <template x-if="!$store.auth.isAuthenticated">
+                        <div class="flex items-start space-x-2.5 p-3.5 rounded-2xl bg-gray-900/90 border border-gray-800 text-gray-400 text-xs leading-relaxed">
+                            <span class="text-emerald-400 text-sm flex-shrink-0">💡</span>
+                            <div>
+                                <span class="font-bold text-gray-200">Checkout Instan Tanpa Ribet:</span>
+                                <span> Akun customer akan dibuatkan otomatis menggunakan nama, email & no. HP di bawah sehingga Anda bisa langsung memantau resi pengiriman dan status transaksi.</span>
+                            </div>
+                        </div>
+                    </template>
+
+                    <!-- Form Inputs -->
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                        <div>
+                            <label class="block text-xs font-bold text-gray-300 mb-1.5">Nama Lengkap Penerima <span class="text-rose-400">*</span></label>
+                            <input 
+                                type="text" 
+                                x-model="$store.cart.recipientName" 
+                                placeholder="Misal: Budi Santoso"
+                                class="w-full bg-gray-900 border border-gray-700/80 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-gray-500 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-300 mb-1.5">Nomor WhatsApp / HP <span class="text-rose-400">*</span></label>
+                            <input 
+                                type="tel" 
+                                x-model="$store.cart.recipientPhone" 
+                                placeholder="Misal: 081234567890"
+                                class="w-full bg-gray-900 border border-gray-700/80 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-gray-500 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-bold text-gray-300 mb-1.5">Email Aktif (untuk invoice & update pengiriman) <span class="text-rose-400">*</span></label>
+                        <input 
+                            type="email" 
+                            x-model="$store.cart.recipientEmail" 
+                            placeholder="Misal: budi@example.com"
+                            class="w-full bg-gray-900 border border-gray-700/80 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-gray-500 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition">
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-bold text-gray-300 mb-1.5">Alamat Lengkap Pengiriman <span class="text-rose-400">*</span></label>
+                        <textarea 
+                            x-model="$store.cart.recipientAddress" 
+                            rows="3" 
+                            placeholder="Nama Jalan, Nomor Rumah/Gedung, RT/RW, Kelurahan, Kecamatan, Kota / Kabupaten..."
+                            class="w-full bg-gray-900 border border-gray-700/80 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-gray-500 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition"></textarea>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-bold text-gray-300 mb-1.5">Kodepos Tujuan (5 Digit) <span class="text-rose-400">*</span></label>
+                        <div class="relative w-full sm:w-48">
+                            <input 
+                                type="text" 
+                                maxlength="10"
+                                x-model="$store.cart.postalCode" 
+                                placeholder="Misal: 12190"
+                                class="w-full bg-gray-900 border border-gray-700/80 rounded-xl px-3.5 py-2.5 text-xs font-mono font-bold text-white placeholder-gray-500 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition">
+                            <span class="absolute right-3 top-2.5 text-gray-500 text-xs">📮</span>
+                        </div>
+                        <p class="text-[11px] text-gray-400 mt-1">Kodepos menentukan akurasi perhitungan tarif kurir 3PL (JNE, J&T, SiCepat, GoSend).</p>
+                    </div>
+
+                    <!-- Step 1 Actions -->
+                    <div class="pt-4 border-t border-gray-800 flex items-center justify-between">
+                        <button 
+                            type="button" 
+                            @click="$store.cart.isCheckoutOpen = false; $store.cart.isDrawerOpen = true" 
+                            class="px-4 py-2.5 rounded-xl bg-gray-900 hover:bg-gray-800 border border-gray-700 text-xs font-semibold text-gray-300 transition cursor-pointer">
+                            ← Kembali ke Keranjang
+                        </button>
+
+                        <button 
+                            type="button" 
+                            :disabled="$store.cart.isLoadingRates"
+                            @click="fetchShippingRatesForCheckout()" 
+                            class="px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-black text-xs font-black shadow-lg shadow-emerald-500/20 active:scale-95 transition flex items-center space-x-2 cursor-pointer">
+                            <template x-if="$store.cart.isLoadingRates">
+                                <span class="flex items-center space-x-1.5">
+                                    <svg class="w-4 h-4 animate-spin text-black" fill="none" viewBox="0 0 24 24">
+                                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                    <span>Mencari Ekspedisi...</span>
+                                </span>
+                            </template>
+                            <template x-if="!$store.cart.isLoadingRates">
+                                <span class="flex items-center space-x-1.5">
+                                    <span>Lanjut: Pilih Ekspedisi</span>
+                                    <span>→</span>
+                                </span>
+                            </template>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- STEP 2: 3PL Courier Selection -->
+                <div x-show="$store.cart.checkoutStep === 2" class="p-5 sm:p-6 space-y-4">
+                    <!-- Route Information Header -->
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3.5 rounded-2xl bg-gray-950/60 border border-gray-800 text-xs">
+                        <div class="flex items-center space-x-2">
+                            <span class="text-base">🚚</span>
+                            <div>
+                                <span class="text-gray-400">Pengiriman ke Kodepos:</span>
+                                <strong class="text-white font-mono ml-1" x-text="$store.cart.postalCode"></strong>
+                            </div>
+                        </div>
+                        <div class="text-[11px] text-gray-400">
+                            Asal: <span class="text-emerald-400 font-semibold">Hub Jakarta Selatan (12190)</span>
+                        </div>
+                    </div>
+
+                    <!-- Loading Spinner for Rates -->
+                    <div x-show="$store.cart.isLoadingRates" class="py-12 text-center space-y-3">
+                        <div class="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
+                            <svg class="w-6 h-6 animate-spin" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                        </div>
+                        <div class="text-xs text-gray-200 font-bold">Menghubungi Rate Engine Ekspedisi 3PL...</div>
+                        <div class="text-[11px] text-gray-500">Mengkalkulasi ongkir real-time JNE, J&T, SiCepat, dan GoSend berdasarkan berat paket</div>
+                    </div>
+
+                    <!-- Rates Card List -->
+                    <div x-show="!$store.cart.isLoadingRates && $store.cart.shippingRates.length > 0" class="space-y-2.5 max-h-[340px] overflow-y-auto pr-1">
+                        <template x-for="rate in $store.cart.shippingRates" :key="rate.courier_code + '-' + rate.service_code">
+                            <div 
+                                @click="$store.cart.selectedCourier = { courier: rate.courier_code, service: rate.service_code, name: rate.courier_name, service_name: rate.service_name, cost: Number(rate.price), formatted_price: rate.formatted_price, etd: rate.etd }"
+                                :class="($store.cart.selectedCourier && $store.cart.selectedCourier.courier === rate.courier_code && $store.cart.selectedCourier.service === rate.service_code) ? 'bg-emerald-950/40 border-emerald-500 ring-1 ring-emerald-500 shadow-md shadow-emerald-500/10' : 'bg-gray-900/80 border-gray-800 hover:border-gray-700'"
+                                class="p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between group">
+                                
+                                <div class="flex items-center space-x-3">
+                                    <!-- Radio Indicator -->
+                                    <div class="w-4 h-4 rounded-full border flex items-center justify-center transition flex-shrink-0"
+                                        :class="($store.cart.selectedCourier && $store.cart.selectedCourier.courier === rate.courier_code && $store.cart.selectedCourier.service === rate.service_code) ? 'border-emerald-400 bg-emerald-500' : 'border-gray-600 bg-gray-800'">
+                                        <div x-show="($store.cart.selectedCourier && $store.cart.selectedCourier.courier === rate.courier_code && $store.cart.selectedCourier.service === rate.service_code)" class="w-1.5 h-1.5 rounded-full bg-black"></div>
+                                    </div>
+
+                                    <!-- Courier Badge -->
+                                    <div class="px-2.5 py-1 rounded-xl text-[10px] font-black uppercase tracking-wider font-mono flex-shrink-0"
+                                        :class="{
+                                            'bg-blue-500/20 text-blue-300 border border-blue-500/30': rate.courier_code === 'jne',
+                                            'bg-rose-500/20 text-rose-300 border border-rose-500/30': rate.courier_code === 'jnt',
+                                            'bg-amber-500/20 text-amber-300 border border-amber-500/30': rate.courier_code === 'sicepat',
+                                            'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30': rate.courier_code === 'gosend'
+                                        }"
+                                        x-text="rate.courier_code">
+                                    </div>
+
+                                    <div>
+                                        <div class="flex items-center space-x-1.5">
+                                            <span class="text-xs font-bold text-white" x-text="rate.courier_name"></span>
+                                            <span class="text-[11px] font-mono font-bold text-emerald-400" x-text="rate.service_code"></span>
+                                            <span x-show="rate.is_instant" class="px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30">⚡ Instant</span>
+                                        </div>
+                                        <div class="text-[11px] text-gray-400 mt-0.5">
+                                            <span x-text="rate.service_name"></span> • Estimasi Tiba: <strong class="text-gray-200" x-text="rate.etd"></strong>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="text-right flex-shrink-0 pl-2">
+                                    <div class="text-xs sm:text-sm font-black text-emerald-400 font-mono" x-text="rate.formatted_price"></div>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+
+                    <!-- Empty Rates State -->
+                    <div x-show="!$store.cart.isLoadingRates && $store.cart.shippingRates.length === 0" class="text-center py-10 glass-panel rounded-2xl border border-gray-800 space-y-2">
+                        <div class="text-2xl">⚠️</div>
+                        <div class="text-xs text-white font-bold">Tidak ada ekspedisi yang melayani rute ini</div>
+                        <p class="text-[11px] text-gray-400 max-w-sm mx-auto">Pastikan kodepos tujuan terisi dengan benar atau gunakan kodepos alternatif.</p>
+                        <button 
+                            type="button" 
+                            @click="$store.cart.checkoutStep = 1" 
+                            class="px-4 py-2 rounded-xl bg-gray-800 hover:bg-gray-700 text-xs text-white font-semibold mt-2 cursor-pointer">
+                            ← Periksa Kodepos
+                        </button>
+                    </div>
+
+                    <!-- Step 2 Actions -->
+                    <div class="pt-4 border-t border-gray-800 flex items-center justify-between">
+                        <button 
+                            type="button" 
+                            @click="$store.cart.checkoutStep = 1" 
+                            class="px-4 py-2.5 rounded-xl bg-gray-900 hover:bg-gray-800 border border-gray-700 text-xs font-semibold text-gray-300 transition cursor-pointer">
+                            ← Kembali ke Alamat
+                        </button>
+
+                        <button 
+                            type="button" 
+                            :disabled="!$store.cart.selectedCourier" 
+                            @click="$store.cart.checkoutStep = 3" 
+                            :class="!$store.cart.selectedCourier ? 'opacity-40 cursor-not-allowed bg-gray-800 text-gray-400' : 'bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-black shadow-lg shadow-emerald-500/20 active:scale-95 cursor-pointer'"
+                            class="px-6 py-2.5 rounded-xl text-xs font-black transition flex items-center space-x-1.5">
+                            <span>Lanjut ke Pembayaran</span>
+                            <span>→</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- STEP 3: Payment & Confirmation -->
+                <div x-show="$store.cart.checkoutStep === 3" class="p-5 sm:p-6 space-y-4">
+                    <!-- Review Recipient & Shipping Summary -->
+                    <div class="p-4 rounded-2xl bg-gray-950/60 border border-gray-800/90 text-xs space-y-2">
+                        <div class="flex items-center justify-between border-b border-gray-800/80 pb-2">
+                            <div class="flex items-center space-x-2">
+                                <span class="text-emerald-400">📍</span>
+                                <span class="font-bold text-white">Tujuan Pengiriman</span>
+                            </div>
+                            <button 
+                                type="button" 
+                                @click="$store.cart.checkoutStep = 1" 
+                                class="text-[11px] text-emerald-400 hover:underline font-semibold cursor-pointer">
+                                Ubah Alamat
+                            </button>
+                        </div>
+                        <div class="text-gray-300 leading-relaxed">
+                            <strong class="text-white" x-text="$store.cart.recipientName"></strong> 
+                            (<span x-text="$store.cart.recipientPhone"></span>) • <span x-text="$store.cart.recipientEmail"></span><br>
+                            <span class="text-gray-400" x-text="$store.cart.recipientAddress"></span> 
+                            (Kodepos: <span class="font-mono text-gray-200" x-text="$store.cart.postalCode"></span>)
+                        </div>
+                        <div class="pt-2 border-t border-gray-800/80 flex items-center justify-between text-[11px]">
+                            <div class="text-gray-400">
+                                Ekspedisi: <strong class="text-white" x-text="$store.cart.selectedCourier?.name"></strong> (<span class="font-mono text-emerald-400" x-text="$store.cart.selectedCourier?.service"></span>) • Estimasi: <span x-text="$store.cart.selectedCourier?.etd"></span>
+                            </div>
+                            <button 
+                                type="button" 
+                                @click="$store.cart.checkoutStep = 2" 
+                                class="text-[11px] text-emerald-400 hover:underline font-semibold cursor-pointer">
+                                Ubah Kurir
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Items Breakdown List -->
+                    <div class="space-y-1.5">
+                        <div class="flex items-center justify-between text-xs text-gray-400 font-bold uppercase tracking-wider">
+                            <span>Item Pesanan (<span x-text="$store.cart.count"></span> pcs)</span>
+                            <span>Subtotal</span>
+                        </div>
+                        <div class="divide-y divide-gray-800/70 max-h-36 overflow-y-auto pr-1 bg-gray-900/50 rounded-2xl border border-gray-800/80 p-3">
+                            <template x-for="item in $store.cart.items" :key="item.sku">
+                                <div class="py-2 first:pt-0 last:pb-0 flex items-center justify-between text-xs">
+                                    <div class="truncate max-w-[240px] sm:max-w-xs">
+                                        <div class="font-bold text-white truncate" x-text="item.name"></div>
+                                        <div class="text-[10px] text-gray-400">
+                                            <span x-text="item.variant_name"></span> • <span class="font-mono" x-text="item.sku"></span> × <span class="font-bold text-emerald-400" x-text="item.quantity"></span>
+                                        </div>
+                                    </div>
+                                    <div class="text-right font-mono font-bold text-gray-200">
+                                        <span x-text="'Rp ' + Number(item.price * item.quantity).toLocaleString('id-ID')"></span>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+
+                    <!-- Payment Methods -->
+                    <div class="space-y-2">
+                        <label class="block text-xs font-bold text-gray-300 uppercase tracking-wider">Pilih Metode Pembayaran:</label>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                            <!-- QRIS -->
+                            <label 
+                                @click="$store.cart.paymentMethod = 'qris'"
+                                :class="$store.cart.paymentMethod === 'qris' ? 'bg-emerald-950/40 border-emerald-500 ring-1 ring-emerald-500' : 'bg-gray-900/80 border-gray-800 hover:border-gray-700'"
+                                class="p-3 rounded-2xl border transition cursor-pointer flex items-start space-x-2.5">
+                                <input type="radio" name="checkout_payment" value="qris" :checked="$store.cart.paymentMethod === 'qris'" class="mt-1 text-emerald-500 focus:ring-emerald-500 bg-gray-800 border-gray-700">
+                                <div>
+                                    <div class="text-xs font-bold text-white flex items-center space-x-1.5">
+                                        <span>QRIS Instant</span>
+                                        <span class="px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-500/20 text-emerald-400">Otomatis</span>
+                                    </div>
+                                    <p class="text-[10px] text-gray-400 mt-0.5">GoPay, ShopeePay, Dana, LinkAja, & BCA</p>
+                                </div>
+                            </label>
+
+                            <!-- BCA VA -->
+                            <label 
+                                @click="$store.cart.paymentMethod = 'bca_va'"
+                                :class="$store.cart.paymentMethod === 'bca_va' ? 'bg-emerald-950/40 border-emerald-500 ring-1 ring-emerald-500' : 'bg-gray-900/80 border-gray-800 hover:border-gray-700'"
+                                class="p-3 rounded-2xl border transition cursor-pointer flex items-start space-x-2.5">
+                                <input type="radio" name="checkout_payment" value="bca_va" :checked="$store.cart.paymentMethod === 'bca_va'" class="mt-1 text-emerald-500 focus:ring-emerald-500 bg-gray-800 border-gray-700">
+                                <div>
+                                    <div class="text-xs font-bold text-white">BCA Virtual Account</div>
+                                    <p class="text-[10px] text-gray-400 mt-0.5">Verifikasi otomatis 24 jam via m-BCA / KlikBCA</p>
+                                </div>
+                            </label>
+
+                            <!-- Mandiri VA -->
+                            <label 
+                                @click="$store.cart.paymentMethod = 'mandiri_va'"
+                                :class="$store.cart.paymentMethod === 'mandiri_va' ? 'bg-emerald-950/40 border-emerald-500 ring-1 ring-emerald-500' : 'bg-gray-900/80 border-gray-800 hover:border-gray-700'"
+                                class="p-3 rounded-2xl border transition cursor-pointer flex items-start space-x-2.5">
+                                <input type="radio" name="checkout_payment" value="mandiri_va" :checked="$store.cart.paymentMethod === 'mandiri_va'" class="mt-1 text-emerald-500 focus:ring-emerald-500 bg-gray-800 border-gray-700">
+                                <div>
+                                    <div class="text-xs font-bold text-white">Mandiri Virtual Account</div>
+                                    <p class="text-[10px] text-gray-400 mt-0.5">Verifikasi otomatis via Livin' by Mandiri</p>
+                                </div>
+                            </label>
+
+                            <!-- Bank Transfer -->
+                            <label 
+                                @click="$store.cart.paymentMethod = 'bank_transfer'"
+                                :class="$store.cart.paymentMethod === 'bank_transfer' ? 'bg-emerald-950/40 border-emerald-500 ring-1 ring-emerald-500' : 'bg-gray-900/80 border-gray-800 hover:border-gray-700'"
+                                class="p-3 rounded-2xl border transition cursor-pointer flex items-start space-x-2.5">
+                                <input type="radio" name="checkout_payment" value="bank_transfer" :checked="$store.cart.paymentMethod === 'bank_transfer'" class="mt-1 text-emerald-500 focus:ring-emerald-500 bg-gray-800 border-gray-700">
+                                <div>
+                                    <div class="text-xs font-bold text-white">Transfer Bank Manual</div>
+                                    <p class="text-[10px] text-gray-400 mt-0.5">Konfirmasi manual via WhatsApp CS MotoVault</p>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Error Alert Banner -->
+                    <div x-show="$store.cart.checkoutError" x-cloak class="p-3.5 bg-rose-500/15 border border-rose-500/40 rounded-2xl text-xs text-rose-300 flex items-start space-x-2.5">
+                        <span class="text-rose-400 font-bold text-sm flex-shrink-0">⚠️</span>
+                        <div class="flex-1">
+                            <span class="font-bold">Gagal memproses transaksi:</span>
+                            <div class="mt-0.5" x-text="$store.cart.checkoutError"></div>
+                        </div>
+                    </div>
+
+                    <!-- Price Summary Box -->
+                    <div class="p-4 rounded-2xl bg-gray-900/90 border border-gray-800 space-y-2 text-xs">
+                        <div class="flex items-center justify-between text-gray-400">
+                            <span>Subtotal Produk</span>
+                            <span class="font-mono font-bold text-white" x-text="'Rp ' + Number($store.cart.subtotal).toLocaleString('id-ID')"></span>
+                        </div>
+                        <div class="flex items-center justify-between text-gray-400">
+                            <span>Biaya Pengiriman (<span x-text="($store.cart.selectedCourier?.courier || '3PL').toUpperCase()"></span> - <span x-text="$store.cart.selectedCourier?.service || 'REG'"></span>)</span>
+                            <span class="font-mono font-bold text-white" x-text="'Rp ' + Number($store.cart.shippingCost).toLocaleString('id-ID')"></span>
+                        </div>
+                        <div class="pt-2.5 border-t border-gray-800 flex items-center justify-between text-sm font-extrabold">
+                            <span class="text-white">Total Pembayaran</span>
+                            <span class="font-mono text-emerald-400 text-lg sm:text-xl" x-text="'Rp ' + Number($store.cart.totalAmount).toLocaleString('id-ID')"></span>
+                        </div>
+                    </div>
+
+                    <!-- Step 3 Actions -->
+                    <div class="pt-4 border-t border-gray-800 flex items-center justify-between">
+                        <button 
+                            type="button" 
+                            :disabled="$store.cart.isCheckingOut"
+                            @click="$store.cart.checkoutStep = 2" 
+                            class="px-4 py-2.5 rounded-xl bg-gray-900 hover:bg-gray-800 border border-gray-700 text-xs font-semibold text-gray-300 transition cursor-pointer">
+                            ← Kembali ke Ekspedisi
+                        </button>
+
+                        <button 
+                            type="button" 
+                            :disabled="$store.cart.isCheckingOut" 
+                            @click="submitCheckout()" 
+                            class="px-6 sm:px-8 py-3 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-500 hover:from-emerald-400 hover:to-teal-300 text-black text-xs sm:text-sm font-black shadow-xl shadow-emerald-500/25 active:scale-95 transition flex items-center space-x-2 cursor-pointer">
+                            <template x-if="$store.cart.isCheckingOut">
+                                <span class="flex items-center space-x-2">
+                                    <svg class="w-4 h-4 animate-spin text-black" fill="none" viewBox="0 0 24 24">
+                                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                    <span>Memproses Pesanan...</span>
+                                </span>
+                            </template>
+                            <template x-if="!$store.cart.isCheckingOut">
+                                <span class="flex items-center space-x-1.5">
+                                    <span>Bayar Sekarang (</span>
+                                    <span class="font-mono font-black" x-text="'Rp ' + Number($store.cart.totalAmount).toLocaleString('id-ID')"></span>
+                                    <span>) →</span>
+                                </span>
+                            </template>
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- Order Success Modal -->
+    <div 
+        x-show="$store.cart.isOrderSuccessOpen && $store.cart.checkoutSuccessData" 
+        x-cloak
+        @keydown.window.escape="$store.cart.isOrderSuccessOpen = false"
+        class="fixed inset-0 z-50 overflow-y-auto" 
+        role="dialog" 
+        aria-modal="true" 
+        aria-labelledby="success-modal-title">
+
+        <!-- Backdrop -->
+        <div 
+            x-show="$store.cart.isOrderSuccessOpen"
+            x-transition:enter="ease-out duration-300"
+            x-transition:enter-start="opacity-0"
+            x-transition:enter-end="opacity-100"
+            x-transition:leave="ease-in duration-200"
+            x-transition:leave-start="opacity-100"
+            x-transition:leave-end="opacity-0"
+            @click="$store.cart.isOrderSuccessOpen = false"
+            class="fixed inset-0 bg-black/85 backdrop-blur-md transition-opacity"></div>
+
+        <div class="min-h-full flex items-center justify-center p-4 relative z-10">
+            <div 
+                x-show="$store.cart.isOrderSuccessOpen"
+                x-transition:enter="ease-out duration-300"
+                x-transition:enter-start="opacity-0 scale-95"
+                x-transition:enter-end="opacity-100 scale-100"
+                x-transition:leave="ease-in duration-200"
+                x-transition:leave-start="opacity-100 scale-100"
+                x-transition:leave-end="opacity-0 scale-95"
+                class="w-full max-w-lg bg-[#0e1524] border border-emerald-500/40 rounded-3xl shadow-2xl overflow-hidden text-gray-100 p-6 sm:p-8 text-center space-y-5 my-6">
+                
+                <!-- Success Icon -->
+                <div class="w-16 h-16 rounded-full bg-emerald-500/20 border-2 border-emerald-400 text-emerald-400 flex items-center justify-center text-3xl mx-auto shadow-lg shadow-emerald-500/25">
+                    ✓
+                </div>
+
+                <div class="space-y-1.5">
+                    <h2 id="success-modal-title" class="text-xl sm:text-2xl font-black text-white">Pesanan Berhasil Dibuat!</h2>
+                    <p class="text-xs text-gray-400">Invoice transaksi resmi MotoVault Enterprise telah diterbitkan.</p>
+                </div>
+
+                <!-- Order Number Badge -->
+                <div class="p-4 rounded-2xl bg-gray-900/90 border border-gray-800 space-y-2">
+                    <div class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Nomor Pesanan / Invoice:</div>
+                    <div class="font-mono font-black text-emerald-400 text-base sm:text-lg tracking-wide" x-text="$store.cart.checkoutSuccessData?.order_number"></div>
+                    <div class="flex items-center justify-center space-x-2 text-[11px] text-gray-400 pt-1 border-t border-gray-800">
+                        <span>Total: <strong class="text-white font-mono" x-text="'Rp ' + Number($store.cart.checkoutSuccessData?.total_amount || 0).toLocaleString('id-ID')"></strong></span>
+                        <span>•</span>
+                        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/30 uppercase" x-text="$store.cart.checkoutSuccessData?.payment_status || 'UNPAID'"></span>
+                    </div>
+                </div>
+
+                <!-- Payment Instruction Preview -->
+                <div class="p-4 rounded-2xl bg-gray-950/80 border border-gray-800 text-left text-xs space-y-2">
+                    <div class="flex items-center justify-between text-[11px] font-bold text-gray-300 uppercase">
+                        <span>Instruksi Pembayaran</span>
+                        <span class="font-mono text-emerald-400 uppercase" x-text="$store.cart.checkoutSuccessData?.payment_method || 'QRIS'"></span>
+                    </div>
+                    <p class="text-gray-400 text-[11px] leading-relaxed">
+                        Silakan selesaikan pembayaran sesuai nominal tepat di atas. Pesanan akan otomatis diproses ke tahap pengepakan dan penyerahan ke kurir 3PL setelah pembayaran terverifikasi.
+                    </p>
+                </div>
+
+                <!-- Action CTA Buttons -->
+                <div class="pt-2 flex flex-col sm:flex-row gap-2.5">
+                    <button 
+                        type="button" 
+                        @click="$store.cart.isOrderSuccessOpen = false; document.getElementById('katalog-produk')?.scrollIntoView({behavior: 'smooth'})" 
+                        class="flex-1 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-black text-xs font-black shadow-lg shadow-emerald-500/20 active:scale-95 transition cursor-pointer">
+                        Belanja Suku Cadang Lainnya
+                    </button>
+                    <button 
+                        type="button" 
+                        @click="$store.cart.isOrderSuccessOpen = false" 
+                        class="px-4 py-3 rounded-xl bg-gray-900 hover:bg-gray-800 border border-gray-700 text-xs font-bold text-gray-300 transition cursor-pointer">
+                        Tutup
                     </button>
                 </div>
 
@@ -1539,6 +2154,241 @@
                 `;
             } catch (err) {
                 container.innerHTML = `<div class="text-center py-6 text-rose-500 text-xs">Error: ${err.message}</div>`;
+            }
+        }
+
+        // 6. Checkout Flow: Fetch Live 3PL Shipping Rates
+        async function fetchShippingRatesForCheckout() {
+            const cart = Alpine.store('cart');
+            
+            // Validate Step 1 Inputs
+            const name = (cart.recipientName || '').trim();
+            const phone = (cart.recipientPhone || '').trim();
+            const email = (cart.recipientEmail || '').trim();
+            const address = (cart.recipientAddress || '').trim();
+            const postalCode = (cart.postalCode || '').trim();
+
+            if (!name) {
+                alert('Silakan masukkan nama lengkap penerima.');
+                return false;
+            }
+            if (!phone) {
+                alert('Silakan masukkan nomor WhatsApp / HP penerima.');
+                return false;
+            }
+            if (!email || !email.includes('@') || !email.includes('.')) {
+                alert('Silakan masukkan alamat email yang valid.');
+                return false;
+            }
+            if (!address) {
+                alert('Silakan masukkan alamat lengkap pengiriman.');
+                return false;
+            }
+            if (!postalCode || postalCode.length < 5) {
+                alert('Silakan masukkan kode pos tujuan 5 digit yang valid.');
+                return false;
+            }
+
+            cart.isLoadingRates = true;
+            cart.checkoutError = '';
+            cart.save();
+            cart.checkoutStep = 2; // Move to step 2 to show loading / rates
+
+            try {
+                const payload = {
+                    destination_postal_code: postalCode,
+                    items: cart.items.map(item => {
+                        const it = {
+                            quantity: item.quantity,
+                            weight_gram: item.weight_gram || 500
+                        };
+                        if (item.variant_id) {
+                            it.variant_id = item.variant_id;
+                        }
+                        return it;
+                    })
+                };
+
+                const res = await fetch('/api/v1/shipping/rates', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                const json = await res.json();
+
+                if (res.ok && json.success && json.data && Array.isArray(json.data.rates)) {
+                    cart.shippingRates = json.data.rates;
+
+                    // Preserve existing courier choice if present in new rates, else select first
+                    if (cart.shippingRates.length > 0) {
+                        const existingMatch = cart.selectedCourier && cart.shippingRates.find(r => 
+                            r.courier_code === cart.selectedCourier.courier && r.service_code === cart.selectedCourier.service
+                        );
+                        if (existingMatch) {
+                            cart.selectedCourier = {
+                                courier: existingMatch.courier_code,
+                                service: existingMatch.service_code,
+                                name: existingMatch.courier_name,
+                                service_name: existingMatch.service_name,
+                                cost: Number(existingMatch.price),
+                                formatted_price: existingMatch.formatted_price,
+                                etd: existingMatch.etd
+                            };
+                        } else {
+                            const first = cart.shippingRates[0];
+                            cart.selectedCourier = {
+                                courier: first.courier_code,
+                                service: first.service_code,
+                                name: first.courier_name,
+                                service_name: first.service_name,
+                                cost: Number(first.price),
+                                formatted_price: first.formatted_price,
+                                etd: first.etd
+                            };
+                        }
+                    } else {
+                        cart.selectedCourier = null;
+                    }
+                    return true;
+                } else {
+                    const errMessage = json.message || 'Gagal mengambil tarif pengiriman ekspedisi.';
+                    cart.checkoutError = errMessage;
+                    alert(errMessage);
+                    return false;
+                }
+            } catch (err) {
+                const netErr = 'Terjadi gangguan jaringan saat menghitung tarif pengiriman: ' + err.message;
+                cart.checkoutError = netErr;
+                alert(netErr);
+                return false;
+            } finally {
+                cart.isLoadingRates = false;
+            }
+        }
+
+        // 7. Checkout Flow: Submit Final Order & Payment Confirmation
+        async function submitCheckout() {
+            const cart = Alpine.store('cart');
+            const auth = Alpine.store('auth');
+
+            if (cart.items.length === 0) {
+                alert('Keranjang belanja Anda kosong.');
+                return;
+            }
+            if (!cart.selectedCourier) {
+                alert('Silakan pilih salah satu opsi ekspedisi 3PL terlebih dahulu.');
+                cart.checkoutStep = 2;
+                return;
+            }
+
+            cart.isCheckingOut = true;
+            cart.checkoutError = '';
+
+            try {
+                // Ensure authentication token exists (auto-register if guest)
+                let token = auth.token;
+                if (!token) {
+                    const regPayload = {
+                        name: (cart.recipientName || 'Pelanggan MotoVault').trim(),
+                        email: (cart.recipientEmail || '').trim(),
+                        phone: (cart.recipientPhone || '081234567890').trim(),
+                        password: 'Password123!',
+                        password_confirmation: 'Password123!'
+                    };
+
+                    const regRes = await fetch('/api/v1/auth/register', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json'
+                        },
+                        body: JSON.stringify(regPayload)
+                    });
+
+                    const regJson = await regRes.json();
+
+                    if (regRes.ok && regJson.success && regJson.data?.token) {
+                        auth.setAuth(regJson.data.token, regJson.data.user);
+                        token = regJson.data.token;
+                    } else if (regJson.errors?.email || (regJson.message && regJson.message.toLowerCase().includes('sudah terdaftar'))) {
+                        // Email already registered: attempt fallback login with default password
+                        const loginRes = await fetch('/api/v1/auth/login', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Accept': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                email: regPayload.email,
+                                password: 'Password123!'
+                            })
+                        });
+                        const loginJson = await loginRes.json();
+                        if (loginRes.ok && loginJson.success && loginJson.data?.token) {
+                            auth.setAuth(loginJson.data.token, loginJson.data.user);
+                            token = loginJson.data.token;
+                        } else {
+                            throw new Error('Email ' + regPayload.email + ' telah terdaftar dengan password lain. Silakan login terlebih dahulu melalui tombol Masuk di menu atas.');
+                        }
+                    } else {
+                        const errMsg = regJson.errors 
+                            ? Object.values(regJson.errors).flat().join(', ') 
+                            : (regJson.message || 'Gagal mendaftarkan akun untuk pesanan.');
+                        throw new Error(errMsg);
+                    }
+                }
+
+                const payload = {
+                    items: cart.items.map(i => ({ sku: i.sku, quantity: i.quantity })),
+                    shipping_address: `${cart.recipientName} (${cart.recipientPhone}) - ${cart.recipientAddress}, Kodepos ${cart.postalCode}`,
+                    destination_postal_code: cart.postalCode.trim(),
+                    courier_code: cart.selectedCourier.courier,
+                    courier_service: cart.selectedCourier.service,
+                    shipping_cost: Number(cart.shippingCost),
+                    payment_method: cart.paymentMethod || 'qris'
+                };
+
+                const res = await fetch('/api/v1/orders/checkout', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                const json = await res.json();
+
+                if (!res.ok || !json.success) {
+                    throw new Error(json.message || 'Checkout gagal diproses oleh server.');
+                }
+
+                // Save order number to recent orders in localStorage
+                try {
+                    const recentOrders = JSON.parse(localStorage.getItem('motovault_recent_orders') || '[]');
+                    const orderNumber = json.data?.order_number;
+                    if (orderNumber && !recentOrders.includes(orderNumber)) {
+                        recentOrders.unshift(orderNumber);
+                        localStorage.setItem('motovault_recent_orders', JSON.stringify(recentOrders));
+                    }
+                } catch (e) {
+                    console.error('Failed to update recent orders', e);
+                }
+
+                // Success handling
+                cart.checkoutSuccessData = json.data;
+                cart.clearCart();
+                cart.isCheckoutOpen = false;
+                cart.isOrderSuccessOpen = true;
+            } catch (err) {
+                cart.checkoutError = err.message;
+            } finally {
+                cart.isCheckingOut = false;
             }
         }
 
