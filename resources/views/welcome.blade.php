@@ -168,6 +168,20 @@
                 isLoadingRates: false,
                 paymentMethod: 'qris',
 
+                // Toast notifications
+                toastMessage: '',
+                toastVisible: false,
+                toastTimer: null,
+
+                showToast(msg) {
+                    this.toastMessage = msg;
+                    this.toastVisible = true;
+                    if (this.toastTimer) clearTimeout(this.toastTimer);
+                    this.toastTimer = setTimeout(() => {
+                        this.toastVisible = false;
+                    }, 3500);
+                },
+
                 get count() {
                     return this.items.reduce((sum, item) => sum + item.quantity, 0);
                 },
@@ -229,6 +243,7 @@
                         });
                     }
                     this.save();
+                    this.showToast('✅ ' + (variant.name || 'Produk') + ' (' + (variant.variant_name || 'Standar') + ') masuk ke keranjang!');
                     this.isDrawerOpen = true;
                 },
 
@@ -704,25 +719,27 @@
                         </div>
 
                         <!-- Variant Selection -->
-                        <template x-if="variants.length > 1">
+                        @if($product->variants->count() > 1)
                             <div class="mt-3.5 pt-2 border-t border-gray-800/60">
                                 <label class="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Pilih Varian:</label>
                                 <select 
-                                    x-model="selectedVariantIndex"
+                                    x-model.number="selectedVariantIndex"
                                     class="w-full bg-gray-900 border border-gray-700/80 rounded-xl px-2.5 py-1.5 text-xs text-gray-200 outline-none focus:border-emerald-500 transition cursor-pointer">
-                                    <template x-for="(v, idx) in variants" :key="v.id">
-                                        <option :value="idx" x-text="`${v.variant_name} — Rp ${v.final_price.toLocaleString('id-ID')} (Stok: ${v.stock})`"></option>
-                                    </template>
+                                    @foreach($product->variants as $idx => $v)
+                                        <option value="{{ $idx }}">
+                                            {{ $v->variant_name }} — Rp {{ number_format($product->base_price + $v->additional_price, 0, ',', '.') }} ({{ $v->stock > 0 ? 'Stok: '.$v->stock : 'Habis' }})
+                                        </option>
+                                    @endforeach
                                 </select>
                             </div>
-                        </template>
-
-                        <template x-if="variants.length === 1">
+                        @elseif($product->variants->count() === 1)
                             <div class="mt-2 flex items-center justify-between text-[11px] text-gray-400">
-                                <span class="font-mono text-gray-400" x-text="variants[0].variant_name !== 'Default' ? variants[0].variant_name : variants[0].sku"></span>
-                                <span class="text-[11px]" :class="currentStock > 0 ? 'text-gray-300' : 'text-rose-400 font-bold'" x-text="currentStock > 0 ? `Stok: ${currentStock}` : 'Stok Habis'"></span>
+                                <span class="font-mono text-gray-400">{{ $product->variants[0]->variant_name !== 'Default' ? $product->variants[0]->variant_name : $product->variants[0]->sku }}</span>
+                                <span class="text-[11px] {{ $product->variants[0]->stock > 0 ? 'text-gray-300' : 'text-rose-400 font-bold' }}">
+                                    {{ $product->variants[0]->stock > 0 ? 'Stok: '.$product->variants[0]->stock : 'Stok Habis' }}
+                                </span>
                             </div>
-                        </template>
+                        @endif
                     </div>
 
                     <!-- Bottom Card Footer: Price & Add to Cart -->
@@ -743,7 +760,7 @@
                                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/>
                                     </svg>
-                                    <span>Tambah</span>
+                                    <span>+ Keranjang</span>
                                 </span>
                             </template>
                             <template x-if="currentStock <= 0">
@@ -1124,6 +1141,21 @@
                 </svg>
             </div>
         </button>
+    </div>
+
+    <!-- Global Cart Toast Notification -->
+    <div 
+        x-show="$store.cart.toastVisible" 
+        x-cloak
+        x-transition:enter="transition ease-out duration-300"
+        x-transition:enter-start="opacity-0 translate-y-3 scale-95"
+        x-transition:enter-end="opacity-100 translate-y-0 scale-100"
+        x-transition:leave="transition ease-in duration-200"
+        x-transition:leave-start="opacity-100 translate-y-0 scale-100"
+        x-transition:leave-end="opacity-0 translate-y-3 scale-95"
+        class="fixed bottom-24 right-6 sm:right-8 z-50 bg-emerald-500 text-black font-extrabold px-4 py-3 rounded-2xl shadow-2xl shadow-emerald-500/40 flex items-center space-x-2 text-xs border border-emerald-300">
+        <span class="text-base">🛍️</span>
+        <span x-text="$store.cart.toastMessage"></span>
     </div>
 
     <!-- Slide-Over Cart Drawer -->
@@ -2485,6 +2517,29 @@
 
                 <!-- TAB 1: LOGIN FORM -->
                 <form x-show="$store.auth.authTab === 'login'" @submit.prevent="submitAuthLogin()" class="space-y-3.5">
+                    <!-- Quick 1-Click Demo Logins -->
+                    <div class="p-3 bg-gray-950/90 rounded-2xl border border-gray-800 text-[11px] space-y-2">
+                        <div class="font-bold text-gray-300 flex items-center justify-between">
+                            <span>💡 Login Cepat Akun Demo (1-Click):</span>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2">
+                            <button 
+                                type="button"
+                                @click="$store.auth.loginEmail = 'customer@motovault.test'; $store.auth.loginPassword = 'password'; submitAuthLogin()"
+                                class="p-2 rounded-xl bg-gray-900 hover:bg-emerald-500/20 border border-gray-700/80 hover:border-emerald-500/50 text-left transition cursor-pointer">
+                                <div class="font-bold text-emerald-400">👤 Pembeli (Customer)</div>
+                                <div class="text-[10px] text-gray-400 font-mono truncate">customer@motovault.test</div>
+                            </button>
+                            <button 
+                                type="button"
+                                @click="$store.auth.loginEmail = 'admin@motovault.test'; $store.auth.loginPassword = 'password'; submitAuthLogin()"
+                                class="p-2 rounded-xl bg-gray-900 hover:bg-cyan-500/20 border border-gray-700/80 hover:border-cyan-500/50 text-left transition cursor-pointer">
+                                <div class="font-bold text-cyan-400">⚡ Super Admin</div>
+                                <div class="text-[10px] text-gray-400 font-mono truncate">admin@motovault.test</div>
+                            </button>
+                        </div>
+                    </div>
+
                     <div>
                         <label class="block text-xs font-bold text-gray-300 mb-1">Email <span class="text-rose-400">*</span></label>
                         <input 
@@ -2644,21 +2699,41 @@
                     return;
                 }
 
-                container.innerHTML = json.data.map(p => `
+                container.innerHTML = json.data.map(p => {
+                    const firstVar = (p.variants && p.variants.length > 0) ? p.variants[0] : null;
+                    const stock = firstVar ? firstVar.stock : (p.total_stock || 0);
+                    const finalPrice = firstVar ? (Number(p.base_price) + Number(firstVar.additional_price || 0)) : Number(p.base_price || 0);
+                    const varPayload = encodeURIComponent(JSON.stringify({
+                        id: firstVar ? firstVar.id : null,
+                        sku: firstVar ? firstVar.sku : p.slug,
+                        name: p.name,
+                        variant_name: firstVar ? firstVar.variant_name : 'Standar',
+                        price: finalPrice,
+                        stock: stock,
+                        weight_gram: p.weight_gram || 500
+                    }));
+
+                    return `
                     <div class="bg-gray-900/90 border border-gray-800 p-3.5 rounded-2xl hover:border-emerald-500/40 transition">
-                        <div class="flex items-start justify-between">
+                        <div class="flex items-start justify-between gap-2">
                             <div>
                                 <span class="text-[10px] font-bold text-emerald-400 uppercase tracking-wider font-mono">${p.brand || 'Universal'}</span>
-                                <h4 class="text-xs font-bold text-white line-clamp-1">${p.name}</h4>
+                                <h4 class="text-xs font-bold text-white line-clamp-1">${escapeHtml(p.name)}</h4>
                             </div>
-                            <span class="text-xs font-bold text-emerald-400 font-mono">Rp ${(p.base_price || 0).toLocaleString('id-ID')}</span>
+                            <span class="text-xs font-bold text-emerald-400 font-mono whitespace-nowrap">Rp ${finalPrice.toLocaleString('id-ID')}</span>
                         </div>
-                        <div class="mt-2 flex items-center justify-between text-[11px] text-gray-400">
-                            <span class="bg-gray-800 px-2 py-0.5 rounded-md text-gray-300 text-[10px]">${p.category?.name || 'General'}</span>
-                            <span>Stok: <b class="${(p.total_stock || 0) > 5 ? 'text-gray-200' : 'text-amber-400'}">${p.total_stock || 0} unit</b></span>
+                        <div class="mt-2.5 pt-2 border-t border-gray-800/80 flex items-center justify-between text-[11px] text-gray-400">
+                            <span class="bg-gray-800 px-2 py-0.5 rounded-md text-gray-300 text-[10px]">${p.category?.name || 'General'} • Stok: <b class="${stock > 0 ? 'text-gray-200' : 'text-rose-400'}">${stock}</b></span>
+                            ${stock > 0 ? `
+                                <button onclick="addQuickItemFromEncoded('${varPayload}')" class="px-2.5 py-1 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-black text-[10px] font-black transition cursor-pointer active:scale-95 shadow-sm">
+                                    + Keranjang
+                                </button>
+                            ` : `
+                                <span class="text-[10px] text-gray-500 font-bold">Habis</span>
+                            `}
                         </div>
                     </div>
-                `).join('');
+                `}).join('');
             } catch (err) {
                 container.innerHTML = `<div class="text-center py-10 text-rose-500 text-xs">Gagal: ${err.message}</div>`;
             }
@@ -2764,18 +2839,31 @@
                                     prodElem.innerHTML = `
                                         <div class="mt-3 space-y-2">
                                             <div class="text-[11px] font-bold text-emerald-400 uppercase tracking-wider">Rekomendasi Suku Cadang Terverifikasi:</div>
-                                            ${prods.map(p => `
-                                                <div class="bg-gray-950/80 border border-gray-800 p-2.5 rounded-xl flex items-center justify-between text-xs">
-                                                    <div>
+                                            ${prods.map(p => {
+                                                const varPayload = encodeURIComponent(JSON.stringify({
+                                                    id: p.id || null,
+                                                    sku: p.sku,
+                                                    name: p.name,
+                                                    variant_name: p.variant_name || 'Standar',
+                                                    price: Number(p.price),
+                                                    stock: Number(p.stock || 10),
+                                                    weight_gram: p.weight_gram || 500
+                                                }));
+                                                return `
+                                                <div class="bg-gray-950/90 border border-gray-800 p-2.5 rounded-xl flex items-center justify-between text-xs gap-3">
+                                                    <div class="flex-1">
                                                         <div class="font-bold text-gray-200">${escapeHtml(p.name)}</div>
                                                         <div class="text-[11px] text-gray-400 font-mono">SKU: ${escapeHtml(p.sku)} ${p.compatibility_note ? '• '+escapeHtml(p.compatibility_note) : ''}</div>
                                                     </div>
-                                                    <div class="text-right">
-                                                        <div class="font-bold text-emerald-400">Rp ${Number(p.price).toLocaleString('id-ID')}</div>
-                                                        <div class="text-[10px] text-gray-400">Stok: ${p.stock}</div>
+                                                    <div class="text-right flex flex-col items-end space-y-1">
+                                                        <div class="font-bold text-emerald-400 font-mono">Rp ${Number(p.price).toLocaleString('id-ID')}</div>
+                                                        <button onclick="addQuickItemFromEncoded('${varPayload}')" class="px-2.5 py-1 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-black font-extrabold text-[10px] transition cursor-pointer active:scale-95 shadow-sm">
+                                                            + Keranjang
+                                                        </button>
                                                     </div>
                                                 </div>
-                                            `).join('')}
+                                                `;
+                                            }).join('')}
                                         </div>
                                     `;
                                     messagesContainer.scrollTop = messagesContainer.scrollHeight;
@@ -3411,6 +3499,16 @@
         window.submitAuthRegister = submitAuthRegister;
         window.formatDate = formatDate;
         window.getRecentOrdersList = getRecentOrdersList;
+        window.addQuickItemFromEncoded = function(encodedJson) {
+            try {
+                const item = JSON.parse(decodeURIComponent(encodedJson));
+                if (window.Alpine && Alpine.store('cart')) {
+                    Alpine.store('cart').addItem(item);
+                }
+            } catch (e) {
+                console.error('Failed to add quick item:', e);
+            }
+        };
 
         function escapeHtml(text) {
             const div = document.createElement('div');
