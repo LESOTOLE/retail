@@ -69,6 +69,15 @@
                 authError: '',
                 isLoading: false,
 
+                // Form models
+                loginEmail: '',
+                loginPassword: '',
+                regName: '',
+                regEmail: '',
+                regPhone: '',
+                regPassword: '',
+                regPasswordConfirmation: '',
+
                 get isAuthenticated() {
                     return !!this.token;
                 },
@@ -78,13 +87,31 @@
                     this.user = user;
                     localStorage.setItem('motovault_token', token);
                     localStorage.setItem('motovault_user', JSON.stringify(user));
+                    this.isAuthModalOpen = false;
+                    this.authError = '';
+                    if (window.fetchCustomerOrders && Alpine.store('cart')?.isOrderTrackerOpen) {
+                        window.fetchCustomerOrders();
+                    }
                 },
 
                 logout() {
+                    const token = this.token;
+                    if (token) {
+                        fetch('/api/v1/auth/logout', {
+                            method: 'POST',
+                            headers: {
+                                'Authorization': `Bearer ${token}`,
+                                'Accept': 'application/json'
+                            }
+                        }).catch(() => {});
+                    }
                     this.token = null;
                     this.user = null;
                     localStorage.removeItem('motovault_token');
                     localStorage.removeItem('motovault_user');
+                    if (Alpine.store('cart')) {
+                        Alpine.store('cart').customerOrders = [];
+                    }
                 }
             });
 
@@ -121,6 +148,14 @@
                 checkoutError: '',
                 checkoutSuccessData: null,
                 isOrderSuccessOpen: false,
+
+                // Customer Orders & 3PL Live Tracking
+                customerOrders: [],
+                isLoadingOrders: false,
+                ordersError: '',
+                trackingDetails: {},
+                loadingTracking: {},
+                expandedTracking: {},
 
                 // Shipping selection
                 postalCode: localStorage.getItem('motovault_postal') || '12190',
@@ -255,6 +290,13 @@
                 <a href="#logistik-3pl" class="hover:text-emerald-400 transition">3PL Cek Ongkir & Resi</a>
                 <a href="#gudang-cabang" class="hover:text-emerald-400 transition">Routing Cabang</a>
                 <a href="#api-reference" class="hover:text-emerald-400 transition">REST API Docs</a>
+                <button 
+                    type="button" 
+                    @click="$store.cart.isOrderTrackerOpen = true; fetchCustomerOrders()" 
+                    class="hover:text-emerald-400 transition flex items-center space-x-1.5 cursor-pointer text-gray-300">
+                    <span>📦</span>
+                    <span>Pesanan Saya</span>
+                </button>
             </nav>
 
             <!-- Actions: Garage Indicator, Cart Button, Auth Button, POS Cashier Button -->
@@ -270,15 +312,81 @@
                     <span x-text="$store.garage.selectedVehicleName" class="max-w-[120px] truncate"></span>
                 </button>
 
-                <!-- Customer Auth Button -->
+                <!-- Customer Orders Drawer Button (Header Action) -->
                 <button 
-                    @click="$store.auth.isAuthModalOpen = true"
+                    type="button"
+                    @click="$store.cart.isOrderTrackerOpen = true; fetchCustomerOrders()"
+                    class="inline-flex items-center space-x-1.5 px-3 py-2 rounded-xl bg-gray-900/80 hover:bg-gray-800 border border-gray-700/80 text-gray-200 hover:text-white text-xs font-semibold transition active:scale-95 cursor-pointer"
+                    title="Riwayat Pesanan & Lacak Resi 3PL">
+                    <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/>
+                    </svg>
+                    <span class="hidden md:inline">Pesanan Saya</span>
+                </button>
+
+                <!-- Customer Auth Button (When Not Authenticated) -->
+                <button 
+                    x-show="!$store.auth.isAuthenticated"
+                    @click="$store.auth.isAuthModalOpen = true; $store.auth.authTab = 'login'"
                     class="inline-flex items-center space-x-1.5 px-3 py-2 rounded-xl bg-gray-900/80 hover:bg-gray-800 border border-gray-700/80 text-gray-200 hover:text-white text-xs font-semibold transition active:scale-95 cursor-pointer">
                     <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
                     </svg>
-                    <span x-text="$store.auth.isAuthenticated ? ($store.auth.user?.name || 'Pelanggan') : 'Masuk / Daftar'"></span>
+                    <span>Masuk / Daftar</span>
                 </button>
+
+                <!-- Customer Profile Dropdown (When Authenticated) -->
+                <div 
+                    x-show="$store.auth.isAuthenticated" 
+                    x-cloak 
+                    class="relative" 
+                    x-data="{ userDropdownOpen: false }">
+                    <button 
+                        @click="userDropdownOpen = !userDropdownOpen" 
+                        @click.away="userDropdownOpen = false"
+                        class="inline-flex items-center space-x-2 px-3 py-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 text-xs font-semibold transition active:scale-95 cursor-pointer">
+                        <span class="w-5 h-5 rounded-full bg-emerald-500 text-black flex items-center justify-center text-[10px] font-black" x-text="($store.auth.user?.name || 'U').charAt(0).toUpperCase()"></span>
+                        <span class="max-w-[100px] truncate" x-text="$store.auth.user?.name || 'Pelanggan'"></span>
+                        <svg class="w-3.5 h-3.5 text-emerald-400 transition-transform" :class="userDropdownOpen ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                        </svg>
+                    </button>
+
+                    <!-- Dropdown Menu -->
+                    <div 
+                        x-show="userDropdownOpen" 
+                        x-cloak
+                        x-transition:enter="transition ease-out duration-150"
+                        x-transition:enter-start="opacity-0 scale-95"
+                        x-transition:enter-end="opacity-100 scale-100"
+                        x-transition:leave="transition ease-in duration-100"
+                        x-transition:leave-start="opacity-100 scale-100"
+                        x-transition:leave-end="opacity-0 scale-95"
+                        class="absolute right-0 mt-2 w-56 rounded-2xl bg-[#0e1524] border border-gray-800 shadow-2xl p-2 z-50 text-xs">
+                        <div class="px-3 py-2 border-b border-gray-800/80">
+                            <div class="font-bold text-white truncate" x-text="$store.auth.user?.name"></div>
+                            <div class="text-[11px] text-gray-400 font-mono truncate" x-text="$store.auth.user?.email"></div>
+                        </div>
+                        <div class="py-1">
+                            <button 
+                                type="button"
+                                @click="userDropdownOpen = false; $store.cart.isOrderTrackerOpen = true; fetchCustomerOrders()" 
+                                class="w-full text-left px-3 py-2 rounded-xl hover:bg-gray-800/80 text-gray-200 hover:text-white flex items-center space-x-2 transition cursor-pointer">
+                                <span>📦</span>
+                                <span>Pesanan Saya</span>
+                            </button>
+                        </div>
+                        <div class="pt-1 border-t border-gray-800/80">
+                            <button 
+                                type="button"
+                                @click="userDropdownOpen = false; $store.auth.logout()" 
+                                class="w-full text-left px-3 py-2 rounded-xl hover:bg-rose-500/15 text-rose-400 hover:text-rose-300 flex items-center space-x-2 transition cursor-pointer">
+                                <svg class="w-4 h-4 text-rose-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+                                <span>Keluar (Logout)</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
 
                 <!-- Cart Button with Count Badge -->
                 <button 
@@ -1217,6 +1325,321 @@
         </div>
     </div>
 
+    <!-- Customer Orders Slide-Over Drawer ("Pesanan Saya") & 3PL Live Tracking -->
+    <div 
+        x-show="$store.cart.isOrderTrackerOpen" 
+        x-cloak 
+        @keydown.window.escape="$store.cart.isOrderTrackerOpen = false"
+        class="fixed inset-0 z-50 overflow-hidden" 
+        role="dialog" 
+        aria-modal="true" 
+        aria-labelledby="order-tracker-title">
+        
+        <!-- Backdrop -->
+        <div 
+            x-show="$store.cart.isOrderTrackerOpen"
+            x-transition:enter="ease-in-out duration-300"
+            x-transition:enter-start="opacity-0"
+            x-transition:enter-end="opacity-100"
+            x-transition:leave="ease-in-out duration-300"
+            x-transition:leave-start="opacity-100"
+            x-transition:leave-end="opacity-0"
+            @click="$store.cart.isOrderTrackerOpen = false"
+            class="fixed inset-0 bg-black/80 backdrop-blur-sm transition-opacity"></div>
+
+        <div class="fixed inset-y-0 right-0 max-w-full flex pl-6 sm:pl-10">
+            <div 
+                x-show="$store.cart.isOrderTrackerOpen"
+                x-transition:enter="transform transition ease-in-out duration-300 sm:duration-400"
+                x-transition:enter-start="translate-x-full"
+                x-transition:enter-end="translate-x-0"
+                x-transition:leave="transform transition ease-in-out duration-300 sm:duration-400"
+                x-transition:leave-start="translate-x-0"
+                x-transition:leave-end="translate-x-full"
+                class="w-screen max-w-md bg-[#0e1524] border-l border-gray-800/80 shadow-2xl flex flex-col text-gray-100">
+                
+                <!-- Drawer Header -->
+                <div class="p-5 border-b border-gray-800/80 flex items-center justify-between bg-[#070b12]/60 backdrop-blur-md">
+                    <div class="flex items-center space-x-3">
+                        <div class="w-9 h-9 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 font-bold text-lg">
+                            📦
+                        </div>
+                        <div>
+                            <div class="flex items-center space-x-2">
+                                <h2 id="order-tracker-title" class="font-black text-white text-base">Pesanan Saya</h2>
+                                <span 
+                                    x-show="$store.cart.customerOrders.length > 0"
+                                    x-text="$store.cart.customerOrders.length + ' Pesanan'" 
+                                    class="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30"></span>
+                            </div>
+                            <p class="text-[11px] text-gray-400">Riwayat transaksi, status pembayaran & resi 3PL</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center space-x-1">
+                        <!-- Refresh Button -->
+                        <button 
+                            type="button" 
+                            @click="fetchCustomerOrders()" 
+                            class="p-2 rounded-xl text-gray-400 hover:text-white hover:bg-gray-800 transition cursor-pointer"
+                            title="Segarkan daftar pesanan">
+                            <svg class="w-4 h-4" :class="$store.cart.isLoadingOrders ? 'animate-spin text-emerald-400' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                            </svg>
+                        </button>
+                        <!-- Close Button -->
+                        <button 
+                            type="button" 
+                            @click="$store.cart.isOrderTrackerOpen = false" 
+                            class="p-2 rounded-xl text-gray-400 hover:text-white hover:bg-gray-800 transition cursor-pointer"
+                            aria-label="Tutup Riwayat Pesanan">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Drawer Body / Content List -->
+                <div class="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4">
+                    
+                    <!-- Loading Indicator -->
+                    <div x-show="$store.cart.isLoadingOrders" class="py-12 text-center space-y-3">
+                        <div class="inline-flex items-center justify-center w-12 h-12 rounded-full bg-emerald-500/10 text-emerald-400">
+                            <svg class="w-6 h-6 animate-spin" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                        </div>
+                        <p class="text-xs text-gray-400 font-medium">Mengambil riwayat transaksi MotoVault...</p>
+                    </div>
+
+                    <!-- Not Authenticated / Guest Banner -->
+                    <template x-if="!$store.auth.isAuthenticated && !$store.cart.isLoadingOrders">
+                        <div class="p-4 rounded-2xl bg-gray-900/90 border border-gray-800 space-y-3 text-xs">
+                            <div class="flex items-start space-x-2.5">
+                                <span class="text-base text-amber-400">🔑</span>
+                                <div>
+                                    <div class="font-bold text-white">Akun Belum Masuk</div>
+                                    <p class="text-gray-400 text-[11px] mt-0.5 leading-relaxed">
+                                        Masuk untuk melihat sinkronisasi penuh riwayat pesanan, status pembayaran resmi, dan tracking resi ekspedisi langsung dari server MotoVault.
+                                    </p>
+                                </div>
+                            </div>
+                            <button 
+                                type="button" 
+                                @click="$store.auth.isAuthModalOpen = true; $store.auth.authTab = 'login'" 
+                                class="w-full py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-black font-extrabold text-xs shadow-md transition cursor-pointer">
+                                Masuk ke Akun Saya
+                            </button>
+                        </div>
+                    </template>
+
+                    <!-- Recent Orders from LocalStorage (when unauthenticated or has recent orders) -->
+                    <template x-if="!$store.cart.isLoadingOrders && getRecentOrdersList().length > 0 && (!$store.auth.isAuthenticated || $store.cart.customerOrders.length === 0)">
+                        <div class="space-y-3">
+                            <div class="text-[11px] font-bold text-gray-400 uppercase tracking-wider flex items-center justify-between">
+                                <span>Pesanan Terakhir di Perangkat Ini</span>
+                                <span class="text-[10px] text-gray-500 font-mono" x-text="getRecentOrdersList().length + ' nomor'"></span>
+                            </div>
+                            <template x-for="ordNum in getRecentOrdersList()" :key="ordNum">
+                                <div class="bg-gray-900/80 border border-gray-800 rounded-2xl p-3.5 space-y-2">
+                                    <div class="flex items-center justify-between">
+                                        <span class="font-mono font-bold text-emerald-400 text-xs" x-text="ordNum"></span>
+                                        <button 
+                                            type="button" 
+                                            @click="navigator.clipboard.writeText(ordNum); alert('Nomor pesanan ' + ordNum + ' disalin!')" 
+                                            class="text-[10px] text-gray-400 hover:text-white transition cursor-pointer">
+                                            Salin 📋
+                                        </button>
+                                    </div>
+                                    <p class="text-[11px] text-gray-400">
+                                        Pesanan tersimpan pada sesi ini. Masuk untuk melihat live invoice & resi pengiriman.
+                                    </p>
+                                </div>
+                            </template>
+                        </div>
+                    </template>
+
+                    <!-- Authenticated Empty State -->
+                    <template x-if="!$store.cart.isLoadingOrders && $store.auth.isAuthenticated && $store.cart.customerOrders.length === 0 && getRecentOrdersList().length === 0">
+                        <div class="py-16 text-center space-y-4">
+                            <div class="w-16 h-16 rounded-full bg-gray-900 border border-gray-800 flex items-center justify-center text-2xl mx-auto text-gray-500">
+                                🧾
+                            </div>
+                            <div class="space-y-1">
+                                <h3 class="font-bold text-white text-sm">Belum Ada Riwayat Pesanan</h3>
+                                <p class="text-xs text-gray-400 max-w-xs mx-auto">
+                                    Suku cadang dan aksesoris motor yang Anda beli akan muncul di sini lengkap dengan tracking resi 3PL.
+                                </p>
+                            </div>
+                            <button 
+                                type="button" 
+                                @click="$store.cart.isOrderTrackerOpen = false; document.getElementById('katalog-produk')?.scrollIntoView({behavior: 'smooth'})"
+                                class="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-black transition cursor-pointer">
+                                Mulai Jelajahi Suku Cadang
+                            </button>
+                        </div>
+                    </template>
+
+                    <!-- Customer Orders List (Authenticated) -->
+                    <template x-if="!$store.cart.isLoadingOrders && $store.cart.customerOrders.length > 0">
+                        <div class="space-y-4">
+                            <template x-for="order in $store.cart.customerOrders" :key="order.id || order.order_number">
+                                <div class="bg-gray-900/90 border border-gray-800 hover:border-gray-700/80 rounded-2xl p-4 space-y-3.5 transition">
+                                    <!-- Order Header -->
+                                    <div class="flex items-start justify-between border-b border-gray-800/80 pb-2.5">
+                                        <div>
+                                            <div class="flex items-center space-x-1.5">
+                                                <span class="font-mono font-black text-emerald-400 text-xs sm:text-sm" x-text="order.order_number"></span>
+                                                <button 
+                                                    type="button" 
+                                                    @click="navigator.clipboard.writeText(order.order_number); alert('Nomor pesanan disalin!')" 
+                                                    class="text-[11px] text-gray-500 hover:text-gray-300 transition cursor-pointer" 
+                                                    title="Salin nomor pesanan">
+                                                    📋
+                                                </button>
+                                            </div>
+                                            <div class="text-[10px] text-gray-400 mt-0.5 font-medium" x-text="formatDate(order.created_at)"></div>
+                                        </div>
+
+                                        <!-- Status Badges -->
+                                        <div class="flex flex-col items-end space-y-1">
+                                            <!-- Payment Status Badge -->
+                                            <span 
+                                                class="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider border"
+                                                :class="{
+                                                    'bg-emerald-500/15 text-emerald-400 border-emerald-500/30': order.payment_status === 'paid',
+                                                    'bg-amber-500/15 text-amber-400 border-amber-500/30': order.payment_status === 'unpaid',
+                                                    'bg-rose-500/15 text-rose-400 border-rose-500/30': order.payment_status === 'failed',
+                                                    'bg-gray-800 text-gray-400 border-gray-700': order.payment_status === 'refunded'
+                                                }"
+                                                x-text="order.payment_status === 'paid' ? 'Lunas' : (order.payment_status === 'unpaid' ? 'Belum Bayar' : order.payment_status)"></span>
+                                            
+                                            <!-- Fulfillment Status Badge -->
+                                            <span 
+                                                class="px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider border"
+                                                :class="{
+                                                    'bg-blue-500/15 text-blue-400 border-blue-500/30': order.fulfillment_status === 'pending',
+                                                    'bg-sky-500/15 text-sky-400 border-sky-500/30': order.fulfillment_status === 'processing',
+                                                    'bg-indigo-500/15 text-indigo-400 border-indigo-500/30': order.fulfillment_status === 'shipped',
+                                                    'bg-emerald-500/15 text-emerald-300 border-emerald-500/30': order.fulfillment_status === 'delivered',
+                                                    'bg-rose-500/15 text-rose-400 border-rose-500/30': order.fulfillment_status === 'cancelled'
+                                                }"
+                                                x-text="order.fulfillment_status === 'pending' ? 'Menunggu Diproses' : (order.fulfillment_status === 'processing' ? 'Sedang Dikemas' : (order.fulfillment_status === 'shipped' ? 'Dikirim' : (order.fulfillment_status === 'delivered' ? 'Selesai' : order.fulfillment_status)))"></span>
+                                        </div>
+                                    </div>
+
+                                    <!-- Order Items -->
+                                    <div class="space-y-1.5 text-xs">
+                                        <template x-for="item in (order.items || [])" :key="item.id || item.sku">
+                                            <div class="flex items-center justify-between text-gray-300 py-1 border-b border-gray-800/40 last:border-b-0">
+                                                <div class="pr-2 truncate">
+                                                    <div class="font-semibold text-white truncate" x-text="item.product_name || item.variant_name || item.sku"></div>
+                                                    <div class="text-[10px] text-gray-400 font-mono">
+                                                        <span x-text="item.sku"></span>
+                                                        <span class="mx-1">•</span>
+                                                        <span x-text="'Qty: ' + item.quantity"></span>
+                                                    </div>
+                                                </div>
+                                                <div class="text-right font-mono font-bold text-gray-200 text-[11px] whitespace-nowrap" x-text="'Rp ' + Number(item.subtotal || (item.unit_price * item.quantity)).toLocaleString('id-ID')"></div>
+                                            </div>
+                                        </template>
+                                    </div>
+
+                                    <!-- Total Amount Footer -->
+                                    <div class="pt-2 border-t border-gray-800/80 flex items-center justify-between text-xs">
+                                        <span class="text-gray-400 font-medium">Total Pembayaran:</span>
+                                        <span class="font-mono font-black text-emerald-400 text-sm" x-text="'Rp ' + Number(order.total_amount).toLocaleString('id-ID')"></span>
+                                    </div>
+
+                                    <!-- 3PL Live Tracking Resi Section -->
+                                    <div class="pt-2 border-t border-gray-800/80">
+                                        <template x-if="order.tracking_number">
+                                            <div class="space-y-2">
+                                                <div class="flex items-center justify-between bg-gray-950/80 p-2.5 rounded-xl border border-gray-800">
+                                                    <div>
+                                                        <div class="text-[10px] font-bold text-gray-400 uppercase">Resi Pengiriman 3PL:</div>
+                                                        <div class="font-mono font-bold text-white text-xs mt-0.5" x-text="order.tracking_number"></div>
+                                                    </div>
+                                                    <button 
+                                                        type="button" 
+                                                        @click="toggleTrackWaybill(order.tracking_number)" 
+                                                        class="px-3 py-1.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-400 text-xs font-bold transition flex items-center space-x-1 cursor-pointer">
+                                                        <span>🚚</span>
+                                                        <span x-text="$store.cart.expandedTracking[order.tracking_number] ? 'Tutup Resi' : 'Lacak Resi 3PL'"></span>
+                                                    </button>
+                                                </div>
+
+                                                <!-- Live Checkpoints Timeline Accordion -->
+                                                <div 
+                                                    x-show="$store.cart.expandedTracking[order.tracking_number]" 
+                                                    x-cloak
+                                                    x-transition 
+                                                    class="p-3 bg-gray-950 border border-gray-800 rounded-xl space-y-3">
+                                                    
+                                                    <!-- Loading Tracking -->
+                                                    <div x-show="$store.cart.loadingTracking[order.tracking_number]" class="py-4 text-center text-xs text-gray-400 flex items-center justify-center space-x-2">
+                                                        <svg class="w-4 h-4 animate-spin text-emerald-400" fill="none" viewBox="0 0 24 24">
+                                                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                        </svg>
+                                                        <span>Menghubungkan ke gateway kurir 3PL...</span>
+                                                    </div>
+
+                                                    <!-- Tracking Data Display -->
+                                                    <template x-if="!$store.cart.loadingTracking[order.tracking_number] && $store.cart.trackingDetails[order.tracking_number]">
+                                                        <div class="space-y-2.5 text-xs">
+                                                            <div class="flex items-center justify-between pb-2 border-b border-gray-800">
+                                                                <div>
+                                                                    <div class="text-[11px] font-bold text-white uppercase font-mono">
+                                                                        <span x-text="$store.cart.trackingDetails[order.tracking_number].courier_code?.toUpperCase()"></span>
+                                                                        <span x-text="$store.cart.trackingDetails[order.tracking_number].courier_service"></span>
+                                                                    </div>
+                                                                    <div class="text-[10px] text-gray-400" x-text="'Tujuan: ' + ($store.cart.trackingDetails[order.tracking_number].destination_postal_code || '-')"></div>
+                                                                </div>
+                                                                <span 
+                                                                    class="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                                                                    x-text="$store.cart.trackingDetails[order.tracking_number].tracking_status"></span>
+                                                            </div>
+
+                                                            <!-- Checkpoints History List -->
+                                                            <div class="space-y-2 pt-1">
+                                                                <div class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Pergerakan Paket:</div>
+                                                                <div class="relative pl-4 space-y-3 border-l-2 border-emerald-500/30 ml-2">
+                                                                    <template x-for="(h, idx) in ($store.cart.trackingDetails[order.tracking_number].history || [])" :key="idx">
+                                                                        <div class="relative">
+                                                                            <span class="absolute -left-[21px] top-1 w-2.5 h-2.5 rounded-full bg-emerald-400 ring-4 ring-[#0e1524]"></span>
+                                                                            <div class="text-[11px] font-bold text-emerald-400" x-text="h.status?.toUpperCase() + (h.location ? ' • ' + h.location : '')"></div>
+                                                                            <div class="text-[11px] text-gray-300 leading-snug" x-text="h.description"></div>
+                                                                            <div class="text-[9px] text-gray-500 font-mono mt-0.5" x-text="formatDate(h.timestamp)"></div>
+                                                                        </div>
+                                                                    </template>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </template>
+                                                </div>
+                                            </div>
+                                        </template>
+
+                                        <template x-if="!order.tracking_number">
+                                            <div class="flex items-center space-x-2 text-[11px] text-gray-400 italic">
+                                                <span>⏳</span>
+                                                <span x-text="order.payment_status === 'unpaid' ? 'Resi kurir akan diterbitkan setelah pembayaran lunas.' : 'Paket sedang disiapkan di gudang cabang terdekat.'"></span>
+                                            </div>
+                                        </template>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                    </template>
+
+                </div>
+
+            </div>
+        </div>
+    </div>
+
     <!-- 3-Step Checkout Modal with Live 3PL Rates & Payment -->
     <div 
         x-show="$store.cart.isCheckoutOpen" 
@@ -1396,6 +1819,7 @@
                         <textarea 
                             x-model="$store.cart.recipientAddress" 
                             rows="3" 
+                            maxlength="400"
                             placeholder="Nama Jalan, Nomor Rumah/Gedung, RT/RW, Kelurahan, Kecamatan, Kota / Kabupaten..."
                             class="w-full bg-gray-900 border border-gray-700/80 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-gray-500 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition"></textarea>
                     </div>
@@ -1405,6 +1829,7 @@
                         <div class="relative w-full sm:w-48">
                             <input 
                                 type="text" 
+                                inputmode="numeric"
                                 maxlength="10"
                                 x-model="$store.cart.postalCode" 
                                 placeholder="Misal: 12190"
@@ -1733,7 +2158,7 @@
         </div>
     </div>
 
-    <!-- Order Success Modal -->
+    <!-- Order Success Modal with Dynamic Payment Visuals & Direct Orders Drawer Link -->
     <div 
         x-show="$store.cart.isOrderSuccessOpen && $store.cart.checkoutSuccessData" 
         x-cloak
@@ -1779,7 +2204,16 @@
                 <!-- Order Number Badge -->
                 <div class="p-4 rounded-2xl bg-gray-900/90 border border-gray-800 space-y-2">
                     <div class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Nomor Pesanan / Invoice:</div>
-                    <div class="font-mono font-black text-emerald-400 text-base sm:text-lg tracking-wide" x-text="$store.cart.checkoutSuccessData?.order_number"></div>
+                    <div class="flex items-center justify-center space-x-2">
+                        <span class="font-mono font-black text-emerald-400 text-base sm:text-lg tracking-wide" x-text="$store.cart.checkoutSuccessData?.order_number"></span>
+                        <button 
+                            type="button" 
+                            @click="navigator.clipboard.writeText($store.cart.checkoutSuccessData?.order_number); alert('Nomor pesanan ' + $store.cart.checkoutSuccessData?.order_number + ' disalin!')" 
+                            class="p-1 rounded-lg text-gray-400 hover:text-white transition cursor-pointer"
+                            title="Salin Nomor Invoice">
+                            📋
+                        </button>
+                    </div>
                     <div class="flex items-center justify-center space-x-2 text-[11px] text-gray-400 pt-1 border-t border-gray-800">
                         <span>Total: <strong class="text-white font-mono" x-text="'Rp ' + Number($store.cart.checkoutSuccessData?.total_amount || 0).toLocaleString('id-ID')"></strong></span>
                         <span>•</span>
@@ -1787,32 +2221,392 @@
                     </div>
                 </div>
 
-                <!-- Payment Instruction Preview -->
-                <div class="p-4 rounded-2xl bg-gray-950/80 border border-gray-800 text-left text-xs space-y-2">
-                    <div class="flex items-center justify-between text-[11px] font-bold text-gray-300 uppercase">
-                        <span>Instruksi Pembayaran</span>
-                        <span class="font-mono text-emerald-400 uppercase" x-text="$store.cart.checkoutSuccessData?.payment_method || 'QRIS'"></span>
+                <!-- Dynamic Payment Instructions based on payment method -->
+                <!-- 1. QRIS Payment Visual -->
+                <div 
+                    x-show="!$store.cart.paymentMethod || $store.cart.paymentMethod === 'qris'" 
+                    class="p-4 rounded-2xl bg-gray-950/90 border border-emerald-500/30 text-center space-y-3">
+                    <div class="flex items-center justify-between text-xs font-bold border-b border-gray-800 pb-2">
+                        <div class="flex items-center space-x-1.5 text-white">
+                            <span class="px-1.5 py-0.5 rounded bg-white text-black font-black text-[10px]">QRIS</span>
+                            <span>Pembayaran Instan Nasional</span>
+                        </div>
+                        <span class="text-[10px] text-emerald-400 font-mono">Batas: 15:00</span>
+                    </div>
+
+                    <!-- Visual QR Mock Card -->
+                    <div class="bg-white p-3 rounded-xl max-w-[200px] mx-auto shadow-md">
+                        <!-- QR Matrix Mock SVG -->
+                        <svg class="w-full h-auto text-black" viewBox="0 0 100 100" fill="currentColor">
+                            <rect x="5" y="5" width="28" height="28" fill="black"/>
+                            <rect x="9" y="9" width="20" height="20" fill="white"/>
+                            <rect x="13" y="13" width="12" height="12" fill="black"/>
+                            <rect x="67" y="5" width="28" height="28" fill="black"/>
+                            <rect x="71" y="9" width="20" height="20" fill="white"/>
+                            <rect x="75" y="13" width="12" height="12" fill="black"/>
+                            <rect x="5" y="67" width="28" height="28" fill="black"/>
+                            <rect x="9" y="71" width="20" height="20" fill="white"/>
+                            <rect x="13" y="75" width="12" height="12" fill="black"/>
+                            <rect x="37" y="7" width="6" height="6" fill="black"/>
+                            <rect x="47" y="7" width="6" height="6" fill="black"/>
+                            <rect x="57" y="7" width="6" height="6" fill="black"/>
+                            <rect x="37" y="17" width="6" height="6" fill="black"/>
+                            <rect x="47" y="27" width="6" height="6" fill="black"/>
+                            <rect x="17" y="37" width="6" height="6" fill="black"/>
+                            <rect x="27" y="37" width="6" height="6" fill="black"/>
+                            <rect x="37" y="37" width="6" height="6" fill="black"/>
+                            <rect x="47" y="47" width="6" height="6" fill="black"/>
+                            <rect x="57" y="47" width="6" height="6" fill="black"/>
+                            <rect x="67" y="37" width="6" height="6" fill="black"/>
+                            <rect x="77" y="47" width="6" height="6" fill="black"/>
+                            <rect x="87" y="37" width="6" height="6" fill="black"/>
+                            <rect x="37" y="57" width="6" height="6" fill="black"/>
+                            <rect x="57" y="57" width="6" height="6" fill="black"/>
+                            <rect x="77" y="57" width="6" height="6" fill="black"/>
+                            <rect x="37" y="67" width="6" height="6" fill="black"/>
+                            <rect x="47" y="77" width="6" height="6" fill="black"/>
+                            <rect x="57" y="87" width="6" height="6" fill="black"/>
+                            <rect x="67" y="67" width="6" height="6" fill="black"/>
+                            <rect x="77" y="77" width="6" height="6" fill="black"/>
+                            <rect x="87" y="87" width="6" height="6" fill="black"/>
+                        </svg>
+                        <div class="text-[9px] font-bold text-gray-800 uppercase tracking-widest mt-1">MotoVault Official</div>
+                    </div>
+
+                    <!-- Raw QR String & Copy Button -->
+                    <div class="flex items-center justify-between p-2 bg-gray-900 rounded-xl border border-gray-800 text-[10px] font-mono">
+                        <span class="text-gray-400 truncate max-w-[240px]">00020101021226590014ID.LINKAJA.WWW0118936009143000...</span>
+                        <button 
+                            type="button" 
+                            @click="navigator.clipboard.writeText('00020101021226590014ID.LINKAJA.WWW0118936009143000' + ($store.cart.checkoutSuccessData?.order_number || '')); alert('String QRIS disalin!')" 
+                            class="px-2 py-1 bg-gray-800 hover:bg-gray-700 text-emerald-400 rounded font-bold cursor-pointer transition">
+                            Salin Kode
+                        </button>
+                    </div>
+
+                    <p class="text-gray-400 text-[11px] leading-relaxed">
+                        Scan QRIS di atas menggunakan aplikasi GoPay, BCA Mobile, OVO, Dana, ShopeePay, atau m-Banking Anda.
+                    </p>
+                </div>
+
+                <!-- 2. BCA Virtual Account -->
+                <div 
+                    x-show="$store.cart.paymentMethod === 'bca_va'" 
+                    class="p-4 rounded-2xl bg-gray-950/90 border border-gray-800 text-left space-y-3">
+                    <div class="flex items-center justify-between text-xs font-bold text-gray-200 border-b border-gray-800 pb-2">
+                        <div class="flex items-center space-x-2">
+                            <span class="px-2 py-0.5 rounded bg-blue-600 text-white font-black text-[10px]">BCA</span>
+                            <span>BCA Virtual Account</span>
+                        </div>
+                        <span class="text-[10px] text-emerald-400">Otomatis Verifikasi</span>
+                    </div>
+                    <div>
+                        <div class="text-[10px] font-bold text-gray-400 uppercase">Nomor Virtual Account:</div>
+                        <div class="flex items-center justify-between mt-1 p-3 bg-gray-900 rounded-xl border border-gray-800">
+                            <span class="font-mono font-black text-white text-base tracking-wider" x-text="'88099' + ($store.cart.checkoutSuccessData?.order_number?.replace(/\D/g, '').slice(-8) || '20260918')"></span>
+                            <button 
+                                type="button" 
+                                @click="navigator.clipboard.writeText('88099' + ($store.cart.checkoutSuccessData?.order_number?.replace(/\D/g, '').slice(-8) || '20260918')); alert('Nomor VA BCA disalin!')" 
+                                class="px-2.5 py-1 bg-gray-800 hover:bg-gray-700 text-emerald-400 text-xs font-bold rounded-lg transition cursor-pointer">
+                                Salin VA
+                            </button>
+                        </div>
                     </div>
                     <p class="text-gray-400 text-[11px] leading-relaxed">
-                        Silakan selesaikan pembayaran sesuai nominal tepat di atas. Pesanan akan otomatis diproses ke tahap pengepakan dan penyerahan ke kurir 3PL setelah pembayaran terverifikasi.
+                        Buka m-BCA &gt; m-Transfer &gt; BCA Virtual Account &gt; Masukkan nomor VA di atas &gt; Konfirmasi nama PT MotoVault Indonesia.
+                    </p>
+                </div>
+
+                <!-- 3. Mandiri Virtual Account -->
+                <div 
+                    x-show="$store.cart.paymentMethod === 'mandiri_va'" 
+                    class="p-4 rounded-2xl bg-gray-950/90 border border-gray-800 text-left space-y-3">
+                    <div class="flex items-center justify-between text-xs font-bold text-gray-200 border-b border-gray-800 pb-2">
+                        <div class="flex items-center space-x-2">
+                            <span class="px-2 py-0.5 rounded bg-yellow-600 text-black font-black text-[10px]">MANDIRI</span>
+                            <span>Mandiri Virtual Account</span>
+                        </div>
+                        <span class="text-[10px] text-emerald-400">Otomatis Verifikasi</span>
+                    </div>
+                    <div>
+                        <div class="text-[10px] font-bold text-gray-400 uppercase">Nomor Virtual Account:</div>
+                        <div class="flex items-center justify-between mt-1 p-3 bg-gray-900 rounded-xl border border-gray-800">
+                            <span class="font-mono font-black text-white text-base tracking-wider" x-text="'89508' + ($store.cart.checkoutSuccessData?.order_number?.replace(/\D/g, '').slice(-8) || '20260918')"></span>
+                            <button 
+                                type="button" 
+                                @click="navigator.clipboard.writeText('89508' + ($store.cart.checkoutSuccessData?.order_number?.replace(/\D/g, '').slice(-8) || '20260918')); alert('Nomor VA Mandiri disalin!')" 
+                                class="px-2.5 py-1 bg-gray-800 hover:bg-gray-700 text-emerald-400 text-xs font-bold rounded-lg transition cursor-pointer">
+                                Salin VA
+                            </button>
+                        </div>
+                    </div>
+                    <p class="text-gray-400 text-[11px] leading-relaxed">
+                        Buka aplikasi Livin' by Mandiri &gt; Bayar &gt; Pembayaran Baru &gt; Masukkan nomor VA di atas &gt; Konfirmasi pembayaran.
+                    </p>
+                </div>
+
+                <!-- 4. Bank Transfer (Manual) -->
+                <div 
+                    x-show="$store.cart.paymentMethod === 'bank_transfer'" 
+                    class="p-4 rounded-2xl bg-gray-950/90 border border-gray-800 text-left space-y-3">
+                    <div class="flex items-center justify-between text-xs font-bold text-gray-200 border-b border-gray-800 pb-2">
+                        <div class="flex items-center space-x-2">
+                            <span class="px-2 py-0.5 rounded bg-emerald-600 text-black font-black text-[10px]">MANUAL</span>
+                            <span>Transfer Bank Konvensional</span>
+                        </div>
+                        <span class="text-[10px] text-amber-400">Konfirmasi Manual</span>
+                    </div>
+                    <div class="space-y-2">
+                        <div class="p-2.5 bg-gray-900 rounded-xl border border-gray-800 flex items-center justify-between text-xs">
+                            <div>
+                                <div class="font-bold text-white">Bank BCA: 123-456-7890</div>
+                                <div class="text-[10px] text-gray-400">a.n. PT MotoVault Indonesia</div>
+                            </div>
+                            <button 
+                                type="button" 
+                                @click="navigator.clipboard.writeText('1234567890'); alert('Rekening BCA disalin!')" 
+                                class="px-2 py-1 bg-gray-800 text-emerald-400 text-[11px] font-bold rounded cursor-pointer transition">
+                                Salin
+                            </button>
+                        </div>
+                    </div>
+                    <p class="text-gray-400 text-[11px] leading-relaxed">
+                        Harap kirimkan bukti transfer ke Customer Service WhatsApp MotoVault untuk validasi pesanan Anda.
                     </p>
                 </div>
 
                 <!-- Action CTA Buttons -->
                 <div class="pt-2 flex flex-col sm:flex-row gap-2.5">
+                    <!-- "Lihat Pesanan Saya" Primary CTA -->
+                    <button 
+                        type="button" 
+                        @click="$store.cart.isOrderSuccessOpen = false; $store.cart.isOrderTrackerOpen = true; fetchCustomerOrders();" 
+                        class="flex-1 py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-black text-xs font-black shadow-lg shadow-emerald-500/20 active:scale-95 transition flex items-center justify-center space-x-1.5 cursor-pointer">
+                        <span>📦</span>
+                        <span>Lihat Pesanan Saya</span>
+                    </button>
+                    <!-- "Belanja Lagi" Secondary CTA -->
                     <button 
                         type="button" 
                         @click="$store.cart.isOrderSuccessOpen = false; document.getElementById('katalog-produk')?.scrollIntoView({behavior: 'smooth'})" 
-                        class="flex-1 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-black text-xs font-black shadow-lg shadow-emerald-500/20 active:scale-95 transition cursor-pointer">
+                        class="py-3 px-4 rounded-xl bg-gray-900 hover:bg-gray-800 border border-gray-700 text-xs font-bold text-gray-300 transition cursor-pointer">
                         Belanja Suku Cadang Lainnya
                     </button>
+                    <!-- Close CTA -->
                     <button 
                         type="button" 
                         @click="$store.cart.isOrderSuccessOpen = false" 
-                        class="px-4 py-3 rounded-xl bg-gray-900 hover:bg-gray-800 border border-gray-700 text-xs font-bold text-gray-300 transition cursor-pointer">
-                        Tutup
+                        class="px-4 py-3 rounded-xl bg-gray-900 hover:bg-gray-800 border border-gray-700 text-xs font-bold text-gray-400 hover:text-white transition cursor-pointer">
+                        ✕
                     </button>
                 </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- Customer Auth Modal (Login & Register Tabs) -->
+    <div 
+        x-show="$store.auth.isAuthModalOpen" 
+        x-cloak
+        @keydown.window.escape="$store.auth.isAuthModalOpen = false"
+        class="fixed inset-0 z-50 overflow-y-auto" 
+        role="dialog" 
+        aria-modal="true" 
+        aria-labelledby="auth-modal-title">
+
+        <!-- Backdrop -->
+        <div 
+            x-show="$store.auth.isAuthModalOpen"
+            x-transition:enter="ease-out duration-300"
+            x-transition:enter-start="opacity-0"
+            x-transition:enter-end="opacity-100"
+            x-transition:leave="ease-in duration-200"
+            x-transition:leave-start="opacity-100"
+            x-transition:leave-end="opacity-0"
+            @click="$store.auth.isAuthModalOpen = false"
+            class="fixed inset-0 bg-black/85 backdrop-blur-md transition-opacity"></div>
+
+        <div class="min-h-full flex items-center justify-center p-4 relative z-10">
+            <div 
+                x-show="$store.auth.isAuthModalOpen"
+                x-transition:enter="ease-out duration-300"
+                x-transition:enter-start="opacity-0 scale-95"
+                x-transition:enter-end="opacity-100 scale-100"
+                x-transition:leave="ease-in duration-200"
+                x-transition:leave-start="opacity-100 scale-100"
+                x-transition:leave-end="opacity-0 scale-95"
+                class="w-full max-w-md bg-[#0e1524] border border-gray-800 rounded-3xl shadow-2xl overflow-hidden text-gray-100 p-6 sm:p-7 space-y-5 my-6">
+                
+                <!-- Modal Header -->
+                <div class="flex items-center justify-between pb-3 border-b border-gray-800">
+                    <div class="flex items-center space-x-2.5">
+                        <div class="w-8 h-8 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 font-bold">
+                            🔐
+                        </div>
+                        <div>
+                            <h2 id="auth-modal-title" class="text-base font-extrabold text-white">Akun Pelanggan MotoVault</h2>
+                            <p class="text-[10px] text-gray-400">Masuk untuk kemudahan belanja & lacak resi</p>
+                        </div>
+                    </div>
+                    <button 
+                        type="button" 
+                        @click="$store.auth.isAuthModalOpen = false" 
+                        class="p-1.5 rounded-xl text-gray-400 hover:text-white hover:bg-gray-800 transition cursor-pointer">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </div>
+
+                <!-- Tab Switcher (Masuk vs Daftar) -->
+                <div class="grid grid-cols-2 gap-1.5 p-1 bg-gray-950/80 border border-gray-800 rounded-2xl text-xs font-bold">
+                    <button 
+                        type="button" 
+                        @click="$store.auth.authTab = 'login'; $store.auth.authError = ''" 
+                        :class="$store.auth.authTab === 'login' ? 'bg-emerald-500 text-black shadow-md' : 'text-gray-400 hover:text-white'"
+                        class="py-2 rounded-xl transition cursor-pointer text-center">
+                        Masuk (Login)
+                    </button>
+                    <button 
+                        type="button" 
+                        @click="$store.auth.authTab = 'register'; $store.auth.authError = ''" 
+                        :class="$store.auth.authTab === 'register' ? 'bg-emerald-500 text-black shadow-md' : 'text-gray-400 hover:text-white'"
+                        class="py-2 rounded-xl transition cursor-pointer text-center">
+                        Daftar Akun Baru
+                    </button>
+                </div>
+
+                <!-- Error Alert Banner -->
+                <div x-show="$store.auth.authError" x-cloak class="p-3 bg-rose-500/15 border border-rose-500/40 rounded-xl text-xs text-rose-300 flex items-start space-x-2">
+                    <span class="text-rose-400 font-bold">⚠️</span>
+                    <span class="flex-1" x-text="$store.auth.authError"></span>
+                </div>
+
+                <!-- TAB 1: LOGIN FORM -->
+                <form x-show="$store.auth.authTab === 'login'" @submit.prevent="submitAuthLogin()" class="space-y-3.5">
+                    <div>
+                        <label class="block text-xs font-bold text-gray-300 mb-1">Email <span class="text-rose-400">*</span></label>
+                        <input 
+                            type="email" 
+                            required
+                            x-model="$store.auth.loginEmail" 
+                            placeholder="nama@email.com" 
+                            class="w-full bg-gray-900 border border-gray-700/80 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-gray-500 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition">
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-bold text-gray-300 mb-1">Kata Sandi <span class="text-rose-400">*</span></label>
+                        <input 
+                            type="password" 
+                            required
+                            x-model="$store.auth.loginPassword" 
+                            placeholder="••••••••" 
+                            class="w-full bg-gray-900 border border-gray-700/80 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-gray-500 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition">
+                    </div>
+
+                    <button 
+                        type="submit" 
+                        :disabled="$store.auth.isLoading"
+                        class="w-full py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-black font-black text-xs shadow-lg shadow-emerald-500/20 active:scale-95 transition flex items-center justify-center space-x-2 cursor-pointer">
+                        <template x-if="$store.auth.isLoading">
+                            <span class="flex items-center space-x-2">
+                                <svg class="w-4 h-4 animate-spin text-black" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                                <span>Memverifikasi...</span>
+                            </span>
+                        </template>
+                        <template x-if="!$store.auth.isLoading">
+                            <span>Masuk ke Akun Saya →</span>
+                        </template>
+                    </button>
+
+                    <div class="text-center pt-2">
+                        <button 
+                            type="button" 
+                            @click="$store.auth.authTab = 'register'; $store.auth.authError = ''" 
+                            class="text-[11px] text-gray-400 hover:text-emerald-400 transition cursor-pointer">
+                            Belum punya akun? <span class="font-bold text-emerald-400 underline">Daftar sekarang</span>
+                        </button>
+                    </div>
+                </form>
+
+                <!-- TAB 2: REGISTER FORM -->
+                <form x-show="$store.auth.authTab === 'register'" @submit.prevent="submitAuthRegister()" class="space-y-3">
+                    <div>
+                        <label class="block text-xs font-bold text-gray-300 mb-1">Nama Lengkap <span class="text-rose-400">*</span></label>
+                        <input 
+                            type="text" 
+                            required
+                            x-model="$store.auth.regName" 
+                            placeholder="Misal: Budi Pratama" 
+                            class="w-full bg-gray-900 border border-gray-700/80 rounded-xl px-3.5 py-2 text-xs text-white placeholder-gray-500 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition">
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-bold text-gray-300 mb-1">Email <span class="text-rose-400">*</span></label>
+                        <input 
+                            type="email" 
+                            required
+                            x-model="$store.auth.regEmail" 
+                            placeholder="nama@email.com" 
+                            class="w-full bg-gray-900 border border-gray-700/80 rounded-xl px-3.5 py-2 text-xs text-white placeholder-gray-500 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition">
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-bold text-gray-300 mb-1">Nomor WhatsApp / HP</label>
+                        <input 
+                            type="tel" 
+                            x-model="$store.auth.regPhone" 
+                            placeholder="Misal: 081234567890" 
+                            class="w-full bg-gray-900 border border-gray-700/80 rounded-xl px-3.5 py-2 text-xs text-white placeholder-gray-500 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition">
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-bold text-gray-300 mb-1">Kata Sandi (min. 8 karakter & angka) <span class="text-rose-400">*</span></label>
+                        <input 
+                            type="password" 
+                            required
+                            minlength="8"
+                            x-model="$store.auth.regPassword" 
+                            placeholder="••••••••" 
+                            class="w-full bg-gray-900 border border-gray-700/80 rounded-xl px-3.5 py-2 text-xs text-white placeholder-gray-500 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition">
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-bold text-gray-300 mb-1">Konfirmasi Kata Sandi <span class="text-rose-400">*</span></label>
+                        <input 
+                            type="password" 
+                            required
+                            minlength="8"
+                            x-model="$store.auth.regPasswordConfirmation" 
+                            placeholder="••••••••" 
+                            class="w-full bg-gray-900 border border-gray-700/80 rounded-xl px-3.5 py-2 text-xs text-white placeholder-gray-500 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition">
+                    </div>
+
+                    <button 
+                        type="submit" 
+                        :disabled="$store.auth.isLoading"
+                        class="w-full py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-black font-black text-xs shadow-lg shadow-emerald-500/20 active:scale-95 transition flex items-center justify-center space-x-2 cursor-pointer mt-1">
+                        <template x-if="$store.auth.isLoading">
+                            <span class="flex items-center space-x-2">
+                                <svg class="w-4 h-4 animate-spin text-black" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                                <span>Mendaftarkan Akun...</span>
+                            </span>
+                        </template>
+                        <template x-if="!$store.auth.isLoading">
+                            <span>Daftar Akun Baru Sekarang →</span>
+                        </template>
+                    </button>
+
+                    <div class="text-center pt-1">
+                        <button 
+                            type="button" 
+                            @click="$store.auth.authTab = 'login'; $store.auth.authError = ''" 
+                            class="text-[11px] text-gray-400 hover:text-emerald-400 transition cursor-pointer">
+                            Sudah punya akun? <span class="font-bold text-emerald-400 underline">Masuk di sini</span>
+                        </button>
+                    </div>
+                </form>
 
             </div>
         </div>
@@ -2381,7 +3175,10 @@
                 }
 
                 // Success handling
-                cart.checkoutSuccessData = json.data;
+                cart.checkoutSuccessData = {
+                    ...json.data,
+                    payment_method: cart.paymentMethod || json.data?.payment_method || 'qris'
+                };
                 cart.clearCart();
                 cart.isCheckoutOpen = false;
                 cart.isOrderSuccessOpen = true;
@@ -2391,6 +3188,228 @@
                 cart.isCheckingOut = false;
             }
         }
+
+        // 8. Customer Orders Fetcher & Drawer Sync
+        async function fetchCustomerOrders() {
+            const cart = Alpine.store('cart');
+            const auth = Alpine.store('auth');
+
+            if (!auth.token) {
+                cart.customerOrders = [];
+                cart.isLoadingOrders = false;
+                return;
+            }
+
+            cart.isLoadingOrders = true;
+            cart.ordersError = '';
+
+            try {
+                const res = await fetch('/api/v1/orders', {
+                    headers: {
+                        'Authorization': `Bearer ${auth.token}`,
+                        'Accept': 'application/json'
+                    }
+                });
+
+                const json = await res.json();
+
+                if (res.ok && json.success) {
+                    cart.customerOrders = Array.isArray(json.data) ? json.data : (json.data?.data || []);
+                } else if (res.status === 401) {
+                    auth.logout();
+                    cart.customerOrders = [];
+                } else {
+                    cart.ordersError = json.message || 'Gagal memuat pesanan.';
+                }
+            } catch (err) {
+                cart.ordersError = 'Gangguan koneksi: ' + err.message;
+            } finally {
+                cart.isLoadingOrders = false;
+            }
+        }
+
+        // 9. 3PL Waybill Tracking for Customer Orders Drawer
+        async function toggleTrackWaybill(waybillNumber) {
+            if (!waybillNumber) return;
+            const cart = Alpine.store('cart');
+
+            // Toggle expansion state
+            cart.expandedTracking[waybillNumber] = !cart.expandedTracking[waybillNumber];
+
+            if (!cart.expandedTracking[waybillNumber]) {
+                return;
+            }
+
+            // If not yet loaded or wants refresh
+            if (!cart.trackingDetails[waybillNumber]) {
+                cart.loadingTracking[waybillNumber] = true;
+                try {
+                    const res = await fetch(`/api/v1/shipping/track/${encodeURIComponent(waybillNumber)}`, {
+                        headers: { 'Accept': 'application/json' }
+                    });
+                    const json = await res.json();
+                    if (res.ok && json.success && json.data) {
+                        cart.trackingDetails[waybillNumber] = json.data;
+                    } else {
+                        cart.trackingDetails[waybillNumber] = {
+                            waybill_number: waybillNumber,
+                            tracking_status: 'DALAM PROSES',
+                            courier_code: '3PL',
+                            courier_service: 'REG',
+                            history: [
+                                {
+                                    status: 'processing',
+                                    description: json.message || 'Resi terdaftar dalam antrean manifest kurir 3PL.',
+                                    location: 'Hub Gudang MotoVault',
+                                    timestamp: new Date().toISOString()
+                                }
+                            ]
+                        };
+                    }
+                } catch (e) {
+                    cart.trackingDetails[waybillNumber] = {
+                        waybill_number: waybillNumber,
+                        tracking_status: 'INFO TERSEDIA',
+                        courier_code: '3PL',
+                        courier_service: 'REG',
+                        history: [
+                            {
+                                status: 'network_issue',
+                                description: 'Menunggu pembaruan milestone sistem kurir.',
+                                location: 'Sistem Ekspedisi',
+                                timestamp: new Date().toISOString()
+                            }
+                        ]
+                    };
+                } finally {
+                    cart.loadingTracking[waybillNumber] = false;
+                }
+            }
+        }
+
+        // 10. Auth Modal Submission Handlers
+        async function submitAuthLogin() {
+            const auth = Alpine.store('auth');
+            const cart = Alpine.store('cart');
+
+            auth.isLoading = true;
+            auth.authError = '';
+
+            try {
+                const res = await fetch('/api/v1/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        email: (auth.loginEmail || '').trim(),
+                        password: auth.loginPassword || ''
+                    })
+                });
+
+                const json = await res.json();
+
+                if (res.ok && json.success && json.data?.token) {
+                    auth.setAuth(json.data.token, json.data.user);
+                    auth.loginPassword = '';
+                    if (cart.isOrderTrackerOpen) {
+                        fetchCustomerOrders();
+                    }
+                } else {
+                    const errMsg = json.errors 
+                        ? Object.values(json.errors).flat().join(', ')
+                        : (json.message || 'Email atau kata sandi tidak cocok.');
+                    auth.authError = errMsg;
+                }
+            } catch (err) {
+                auth.authError = 'Terjadi kesalahan jaringan: ' + err.message;
+            } finally {
+                auth.isLoading = false;
+            }
+        }
+
+        async function submitAuthRegister() {
+            const auth = Alpine.store('auth');
+            const cart = Alpine.store('cart');
+
+            if (auth.regPassword !== auth.regPasswordConfirmation) {
+                auth.authError = 'Konfirmasi kata sandi tidak cocok.';
+                return;
+            }
+
+            auth.isLoading = true;
+            auth.authError = '';
+
+            try {
+                const res = await fetch('/api/v1/auth/register', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        name: (auth.regName || '').trim(),
+                        email: (auth.regEmail || '').trim(),
+                        phone: (auth.regPhone || '').trim() || null,
+                        password: auth.regPassword || '',
+                        password_confirmation: auth.regPasswordConfirmation || ''
+                    })
+                });
+
+                const json = await res.json();
+
+                if (res.ok && json.success && json.data?.token) {
+                    auth.setAuth(json.data.token, json.data.user);
+                    auth.regPassword = '';
+                    auth.regPasswordConfirmation = '';
+                    if (cart.isOrderTrackerOpen) {
+                        fetchCustomerOrders();
+                    }
+                } else {
+                    const errMsg = json.errors 
+                        ? Object.values(json.errors).flat().join(', ')
+                        : (json.message || 'Registrasi gagal. Silakan periksa data input.');
+                    auth.authError = errMsg;
+                }
+            } catch (err) {
+                auth.authError = 'Terjadi kesalahan jaringan: ' + err.message;
+            } finally {
+                auth.isLoading = false;
+            }
+        }
+
+        function formatDate(isoStr) {
+            if (!isoStr) return '-';
+            try {
+                const date = new Date(isoStr);
+                return date.toLocaleDateString('id-ID', {
+                    day: 'numeric',
+                    month: 'short',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                }) + ' WIB';
+            } catch (e) {
+                return isoStr;
+            }
+        }
+
+        function getRecentOrdersList() {
+            try {
+                const raw = localStorage.getItem('motovault_recent_orders');
+                return raw ? JSON.parse(raw) : [];
+            } catch (e) {
+                return [];
+            }
+        }
+
+        window.fetchCustomerOrders = fetchCustomerOrders;
+        window.toggleTrackWaybill = toggleTrackWaybill;
+        window.submitAuthLogin = submitAuthLogin;
+        window.submitAuthRegister = submitAuthRegister;
+        window.formatDate = formatDate;
+        window.getRecentOrdersList = getRecentOrdersList;
 
         function escapeHtml(text) {
             const div = document.createElement('div');
