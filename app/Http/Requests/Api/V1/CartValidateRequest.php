@@ -25,8 +25,8 @@ class CartValidateRequest extends FormRequest
             'items.*.quantity' => ['required', 'integer', 'min:1', 'max:999'],
             'shipping_address' => ['nullable', 'string', 'max:500'],
             'destination_postal_code' => ['nullable', 'string', 'max:10'],
-            'courier_code' => ['nullable', 'string', 'max:50'],
-            'courier_service' => ['nullable', 'string', 'max:50'],
+            'courier_code' => ['nullable', 'string', 'max:30'],
+            'courier_service' => ['nullable', 'string', 'max:30'],
             'shipping_cost' => ['nullable', 'numeric', 'min:0'],
             'payment_method' => ['nullable', 'string', 'max:50'],
         ];

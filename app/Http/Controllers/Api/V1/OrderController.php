@@ -28,7 +28,7 @@ class OrderController extends Controller
     public function checkout(CartValidateRequest $request): JsonResponse
     {
         try {
-            $shippingData = $request->only([
+            $shippingData = $request->safe()->only([
                 'shipping_address',
                 'destination_postal_code',
                 'courier_code',
