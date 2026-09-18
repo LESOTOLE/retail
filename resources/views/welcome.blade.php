@@ -963,6 +963,246 @@
         <p>© 2026 MotoVault Indonesia. All rights reserved.</p>
     </footer>
 
+    <!-- Floating Cart Pill -->
+    <div 
+        x-show="$store.cart.count > 0"
+        x-cloak
+        x-transition:enter="transition ease-out duration-300 transform"
+        x-transition:enter-start="opacity-0 translate-y-4 scale-95"
+        x-transition:enter-end="opacity-100 translate-y-0 scale-100"
+        x-transition:leave="transition ease-in duration-200 transform"
+        x-transition:leave-start="opacity-100 translate-y-0 scale-100"
+        x-transition:leave-end="opacity-0 translate-y-4 scale-95"
+        class="fixed bottom-6 right-6 z-40">
+        <button 
+            type="button"
+            @click="$store.cart.isDrawerOpen = true"
+            class="flex items-center space-x-3 px-4 py-3 bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-500 hover:from-emerald-400 hover:to-teal-300 text-black rounded-2xl shadow-2xl shadow-emerald-500/40 border border-emerald-300/40 hover:scale-105 active:scale-95 transition-all duration-200 cursor-pointer group">
+            
+            <!-- Cart Icon & Count Badge -->
+            <div class="relative flex items-center justify-center">
+                <svg class="w-6 h-6 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"/>
+                </svg>
+                <span 
+                    x-text="$store.cart.count"
+                    class="absolute -top-2 -right-2 bg-black text-emerald-400 font-mono font-black text-[10px] w-5 h-5 rounded-full flex items-center justify-center border border-emerald-400/50 shadow-md"></span>
+            </div>
+
+            <!-- Total Price Label -->
+            <div class="text-left pl-1">
+                <div class="text-[10px] font-bold uppercase tracking-wider text-black/70 leading-none">Keranjang</div>
+                <div class="text-xs sm:text-sm font-black font-mono text-black leading-tight" x-text="'Rp ' + Number($store.cart.subtotal).toLocaleString('id-ID')"></div>
+            </div>
+
+            <!-- Arrow Icon -->
+            <div class="pl-1 group-hover:translate-x-0.5 transition-transform">
+                <svg class="w-4 h-4 text-black font-bold" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"/>
+                </svg>
+            </div>
+        </button>
+    </div>
+
+    <!-- Slide-Over Cart Drawer -->
+    <div 
+        x-show="$store.cart.isDrawerOpen"
+        x-cloak
+        @keydown.window.escape="$store.cart.isDrawerOpen = false"
+        class="fixed inset-0 z-50 overflow-hidden"
+        role="dialog" 
+        aria-modal="true" 
+        aria-labelledby="cart-drawer-title">
+
+        <!-- Backdrop -->
+        <div 
+            x-show="$store.cart.isDrawerOpen"
+            x-transition:enter="ease-in-out duration-300"
+            x-transition:enter-start="opacity-0"
+            x-transition:enter-end="opacity-100"
+            x-transition:leave="ease-in-out duration-300"
+            x-transition:leave-start="opacity-100"
+            x-transition:leave-end="opacity-0"
+            @click="$store.cart.isDrawerOpen = false"
+            class="fixed inset-0 bg-black/75 backdrop-blur-sm transition-opacity"></div>
+
+        <div class="fixed inset-y-0 right-0 max-w-full flex pl-10">
+            <!-- Drawer Panel -->
+            <div 
+                x-show="$store.cart.isDrawerOpen"
+                x-transition:enter="transform transition ease-in-out duration-300 sm:duration-500"
+                x-transition:enter-start="translate-x-full"
+                x-transition:enter-end="translate-x-0"
+                x-transition:leave="transform transition ease-in-out duration-300 sm:duration-500"
+                x-transition:leave-start="translate-x-0"
+                x-transition:leave-end="translate-x-full"
+                class="w-screen max-w-md bg-[#0e1524] border-l border-gray-800 text-gray-100 shadow-2xl flex flex-col justify-between">
+
+                <!-- Header -->
+                <div class="px-5 py-4 sm:px-6 sm:py-5 border-b border-gray-800 flex items-center justify-between bg-gray-900/60 backdrop-blur-md">
+                    <div class="flex items-center space-x-2.5">
+                        <span class="w-8 h-8 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">🛒</span>
+                        <h2 id="cart-drawer-title" class="text-base sm:text-lg font-extrabold text-white">Keranjang Belanja</h2>
+                        <span 
+                            x-show="$store.cart.count > 0" 
+                            x-text="$store.cart.count" 
+                            class="bg-emerald-500/20 text-emerald-400 text-xs font-mono font-bold px-2 py-0.5 rounded-full border border-emerald-500/30"></span>
+                    </div>
+
+                    <div class="flex items-center space-x-2">
+                        <!-- Clear Cart Button -->
+                        <button 
+                            type="button" 
+                            x-show="$store.cart.count > 0" 
+                            @click="if (confirm('Kosongkan semua item di keranjang?')) $store.cart.clearCart()" 
+                            class="text-[11px] text-rose-400 hover:text-rose-300 font-semibold px-2 py-1 rounded-lg hover:bg-rose-500/10 transition cursor-pointer">
+                            Kosongkan
+                        </button>
+
+                        <!-- Close Button -->
+                        <button 
+                            type="button" 
+                            @click="$store.cart.isDrawerOpen = false" 
+                            class="p-1.5 rounded-xl text-gray-400 hover:text-white hover:bg-gray-800 transition cursor-pointer" 
+                            aria-label="Tutup Keranjang">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Body / Items List / Empty State -->
+                <div class="flex-1 overflow-y-auto px-5 py-4 sm:px-6 space-y-4">
+                    <!-- Empty State -->
+                    <div x-show="$store.cart.count === 0" class="text-center py-16 flex flex-col items-center justify-center space-y-4">
+                        <div class="w-20 h-20 rounded-3xl bg-gray-900 border border-gray-800 flex items-center justify-center text-4xl shadow-inner">
+                            🛒
+                        </div>
+                        <div class="space-y-1">
+                            <h3 class="text-base font-bold text-white">Keranjang belanja Anda masih kosong</h3>
+                            <p class="text-xs text-gray-400 max-w-xs leading-relaxed">
+                                Jelajahi katalog suku cadang bergaransi presisi untuk motor kesayangan Anda.
+                            </p>
+                        </div>
+                        <button 
+                            type="button" 
+                            @click="$store.cart.isDrawerOpen = false; document.getElementById('katalog-produk')?.scrollIntoView({behavior: 'smooth'})" 
+                            class="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-extrabold transition shadow-lg shadow-emerald-500/20 active:scale-95 cursor-pointer">
+                            Mulai Belanja
+                        </button>
+                    </div>
+
+                    <!-- Items List -->
+                    <div x-show="$store.cart.count > 0" class="divide-y divide-gray-800/80">
+                        <template x-for="item in $store.cart.items" :key="item.sku">
+                            <div class="py-4 first:pt-0 flex gap-3.5 items-start">
+                                <!-- Item Avatar/Thumbnail -->
+                                <div class="w-16 h-16 rounded-xl bg-gray-950 border border-gray-800 flex-shrink-0 flex items-center justify-center text-2xl shadow-inner">
+                                    ⚙️
+                                </div>
+
+                                <!-- Item Details -->
+                                <div class="flex-1 min-w-0">
+                                    <div class="flex items-start justify-between gap-2">
+                                        <h4 class="text-xs sm:text-sm font-bold text-white truncate" x-text="item.name"></h4>
+                                        <!-- Remove Item Button -->
+                                        <button 
+                                            type="button" 
+                                            @click="$store.cart.removeItem(item.sku)" 
+                                            class="text-gray-400 hover:text-rose-400 p-1 rounded-lg hover:bg-rose-500/10 transition cursor-pointer flex-shrink-0" 
+                                            title="Hapus dari keranjang"
+                                            aria-label="Hapus item">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                            </svg>
+                                        </button>
+                                    </div>
+
+                                    <div class="text-[11px] text-gray-400 flex items-center space-x-2 mt-0.5">
+                                        <span class="text-gray-300" x-text="item.variant_name"></span>
+                                        <span>•</span>
+                                        <span class="font-mono text-gray-500" x-text="'SKU: ' + item.sku"></span>
+                                    </div>
+
+                                    <div class="mt-1 flex items-baseline space-x-2">
+                                        <span class="text-xs font-extrabold text-emerald-400 font-mono" x-text="'Rp ' + Number(item.price).toLocaleString('id-ID')"></span>
+                                        <span x-show="item.quantity > 1" class="text-[10px] text-gray-500 font-mono" x-text="'(Total: Rp ' + Number(item.price * item.quantity).toLocaleString('id-ID') + ')'"></span>
+                                    </div>
+
+                                    <!-- Max Stock Indicator -->
+                                    <div x-show="item.quantity >= item.stock" class="mt-1 text-[10px] text-amber-400 font-semibold flex items-center space-x-1">
+                                        <span>⚠️ Stok Maksimal (<span x-text="item.stock"></span> pcs)</span>
+                                    </div>
+
+                                    <!-- Stepper Controls -->
+                                    <div class="mt-2.5 flex items-center justify-between">
+                                        <div class="flex items-center border border-gray-700/80 rounded-lg bg-gray-900 overflow-hidden">
+                                            <button 
+                                                type="button" 
+                                                @click="$store.cart.updateQty(item.sku, item.quantity - 1)" 
+                                                class="w-7 h-7 flex items-center justify-center text-gray-300 hover:text-white hover:bg-gray-800 transition cursor-pointer text-xs font-bold"
+                                                aria-label="Kurang satu">
+                                                -
+                                            </button>
+                                            <input 
+                                                type="number" 
+                                                min="1" 
+                                                :max="item.stock" 
+                                                :value="item.quantity" 
+                                                @change="$store.cart.updateQty(item.sku, $event.target.value)" 
+                                                class="w-10 h-7 bg-transparent text-center text-xs font-mono font-bold text-white outline-none border-x border-gray-700/80 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none">
+                                            <button 
+                                                type="button" 
+                                                :disabled="item.quantity >= item.stock" 
+                                                @click="$store.cart.updateQty(item.sku, item.quantity + 1)" 
+                                                :class="item.quantity >= item.stock ? 'opacity-40 cursor-not-allowed' : 'hover:bg-gray-800 text-gray-300 hover:text-white cursor-pointer'" 
+                                                class="w-7 h-7 flex items-center justify-center transition text-xs font-bold"
+                                                aria-label="Tambah satu">
+                                                +
+                                            </button>
+                                        </div>
+
+                                        <div class="text-[11px] text-gray-400 font-mono">
+                                            <span x-text="'Rp ' + Number(item.price * item.quantity).toLocaleString('id-ID')"></span>
+                                        </div>
+                                    </div>
+
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+
+                <!-- Footer -->
+                <div class="p-5 sm:p-6 border-t border-gray-800 bg-gray-900/90 backdrop-blur-md space-y-3.5">
+                    <div class="flex items-center justify-between text-sm">
+                        <span class="text-gray-400 font-medium">Subtotal</span>
+                        <span class="font-mono font-black text-emerald-400 text-lg" x-text="'Rp ' + Number($store.cart.subtotal).toLocaleString('id-ID')"></span>
+                    </div>
+
+                    <div class="flex items-start space-x-2 text-[11px] text-gray-400 bg-gray-950/60 p-2.5 rounded-xl border border-gray-800/80">
+                        <span class="text-emerald-400 text-xs flex-shrink-0">ℹ️</span>
+                        <span>Ongkir multi-ekspedisi real-time (JNE/J&T/SiCepat/GoSend) dihitung otomatis pada langkah pembayaran.</span>
+                    </div>
+
+                    <button 
+                        type="button" 
+                        :disabled="$store.cart.count === 0"
+                        @click="$store.cart.isDrawerOpen = false; $store.cart.isCheckoutOpen = true; $store.cart.checkoutStep = 1"
+                        :class="$store.cart.count === 0 ? 'bg-gray-800 text-gray-500 cursor-not-allowed border border-gray-700' : 'bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-black hover:shadow-emerald-500/25 active:scale-95 shadow-lg shadow-emerald-500/20 cursor-pointer'"
+                        class="w-full py-3.5 rounded-xl text-xs sm:text-sm font-black transition-all flex items-center justify-center space-x-2">
+                        <span>Lanjut ke Pembayaran</span>
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M14 5l7 7m0 0l-7 7m7-7H3"/>
+                        </svg>
+                    </button>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
     <!-- Client-Side JavaScript Logic -->
     <script>
         let currentSessionToken = null;
