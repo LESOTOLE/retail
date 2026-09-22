@@ -82,11 +82,11 @@
         <!-- Right: Auth info, 1-Click login buttons & status -->
         <div class="flex items-center space-x-3">
             <div id="auth-guest-panel" class="flex items-center space-x-2">
-                <button onclick="loginAs('admin@motovault.test', 'password')" class="px-3 py-1.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-semibold transition flex items-center space-x-1.5 cursor-pointer">
+                <button onclick="promptLogin('admin@motovault.test')" class="px-3 py-1.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-semibold transition flex items-center space-x-1.5 cursor-pointer">
                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"/></svg>
                     <span>Login Super Admin</span>
                 </button>
-                <button onclick="loginAs('staff@motovault.test', 'password')" class="px-3 py-1.5 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700 text-xs font-semibold transition flex items-center space-x-1.5 cursor-pointer">
+                <button onclick="promptLogin('staff@motovault.test')" class="px-3 py-1.5 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700 text-xs font-semibold transition flex items-center space-x-1.5 cursor-pointer">
                     <span>Login Staff</span>
                 </button>
             </div>
@@ -760,8 +760,8 @@
         const AdminApi = {
             async request(endpoint, options = {}) {
                 if (!currentToken) {
-                    // Try auto login as admin demo if no token
-                    await loginAs('admin@motovault.test', 'password', true);
+                    window.location.href = '/';
+                    throw new Error('Unauthorized');
                 }
                 const headers = {
                     'Accept': 'application/json',
@@ -814,6 +814,14 @@
             } catch (err) {
                 if (!silent) showToast('Gagal menghubungi server autentikasi', 'error');
             }
+        }
+
+        function promptLogin(defaultEmail) {
+            const email = prompt('Email akun Admin / Staff:', defaultEmail || '');
+            if (!email) return;
+            const password = prompt('Password akun:');
+            if (!password) return;
+            loginAs(email.trim(), password);
         }
 
         async function handleLogout() {
@@ -1404,7 +1412,7 @@
                             </span>
                         </td>
                         <td class="p-4 text-right">
-                            <button onclick="alert('Log ID: ' + ${l.id} + '\\nDetail Tool Calls: ' + JSON.stringify(${JSON.stringify(l.tool_calls || [])}))" class="px-2 py-1 rounded bg-gray-800 hover:bg-gray-700 text-xs text-gray-300 cursor-pointer">Inspeksi</button>
+                            <button onclick="console.log('Log ID:', ${l.id}, 'Detail Tool Calls:', ${JSON.stringify(l.tool_calls || [])})" class="px-2 py-1 rounded bg-gray-800 hover:bg-gray-700 text-xs text-gray-300 cursor-pointer">Inspeksi (Console)</button>
                         </td>
                     </tr>
                 `).join('');

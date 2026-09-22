@@ -48,7 +48,7 @@ Route::prefix('v1')->group(function () {
     Route::get('/products/{slug}', [ProductController::class, 'show'])->middleware('throttle:catalog')->name('api.v1.products.show');
 
     // 6.3 Validasi Keranjang (Cart)
-    Route::post('/cart/validate', [CartController::class, 'validateCart'])->name('api.v1.cart.validate');
+    Route::post('/cart/validate', [CartController::class, 'validateCart'])->middleware('throttle:checkout')->name('api.v1.cart.validate');
 
     // 6.3 Transaksi & Pesanan Pelanggan (Customer)
     Route::middleware('auth:sanctum')->group(function () {
@@ -68,13 +68,13 @@ Route::prefix('v1')->group(function () {
     Route::get('/notifications/recent', [NotificationController::class, 'recent'])->middleware('throttle:catalog')->name('api.v1.notifications.recent');
 
     // 6.7 3PL Shipping Rates & Waybill Tracking (PRD Phase 2 - Feature 3)
-    Route::post('/shipping/rates', [\App\Http\Controllers\Api\V1\ShippingController::class, 'rates'])->name('api.v1.shipping.rates');
-    Route::get('/shipping/track/{waybill_number}', [\App\Http\Controllers\Api\V1\ShippingController::class, 'track'])->name('api.v1.shipping.track');
+    Route::post('/shipping/rates', [\App\Http\Controllers\Api\V1\ShippingController::class, 'rates'])->middleware('throttle:checkout')->name('api.v1.shipping.rates');
+    Route::get('/shipping/track/{waybill_number}', [\App\Http\Controllers\Api\V1\ShippingController::class, 'track'])->middleware('throttle:catalog')->name('api.v1.shipping.track');
 
     // 6.8 Multi-Warehouse Proximity & Branch Inventory (PRD Phase 2 - Feature 5)
     Route::get('/warehouses', [\App\Http\Controllers\Api\V1\WarehouseController::class, 'index'])->name('api.v1.warehouses.index');
     Route::get('/warehouses/{id}', [\App\Http\Controllers\Api\V1\WarehouseController::class, 'show'])->name('api.v1.warehouses.show');
-    Route::post('/warehouses/route-nearest', [\App\Http\Controllers\Api\V1\WarehouseController::class, 'routeNearest'])->name('api.v1.warehouses.route_nearest');
+    Route::post('/warehouses/route-nearest', [\App\Http\Controllers\Api\V1\WarehouseController::class, 'routeNearest'])->middleware('throttle:catalog')->name('api.v1.warehouses.route_nearest');
 
     // 6.8 POS Kasir Toko Fisik (Staff / Admin)
     Route::middleware(['auth:sanctum', 'role:staff|admin'])->prefix('pos')->group(function () {

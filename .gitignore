@@ -23,3 +23,9 @@
 Homestead.json
 Homestead.yaml
 Thumbs.db
+
+.env.local
+.env.*.local
+.env.staging
+*.pem
+*.crt

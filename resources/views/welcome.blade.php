@@ -51,8 +51,8 @@
     <!-- Pusher JS & Laravel Echo CDN for Reverb WebSockets -->
     <script src="https://js.pusher.com/8.2.0/pusher.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/laravel-echo@1.16.1/dist/echo.iife.js"></script>
-    <!-- Midtrans Snap JS (Sandbox) -->
-    <script src="https://app.sandbox.midtrans.com/snap/snap.js" data-client-key="{{ config('services.midtrans.client_key', 'SB-Mid-client-demo') }}"></script>
+    <!-- Midtrans Snap JS -->
+    <script src="{{ config('services.midtrans.is_production') ? 'https://app.midtrans.com/snap/snap.js' : 'https://app.sandbox.midtrans.com/snap/snap.js' }}" data-client-key="{{ config('services.midtrans.client_key') }}"></script>
     <script>
         document.addEventListener('alpine:init', () => {
             // Helper for safe JSON localStorage retrieval
@@ -301,13 +301,13 @@
                             }
                         });
                 } catch (e) {
-                    console.warn('Storefront Echo init notice:', e);
+                    // Echo initialization skipped
                 }
             }
         });
     </script>
 </head>
-<body class="bg-[#070b12] text-gray-100 min-h-screen antialiased selection:bg-emerald-500 selection:text-black">
+<body x-data class="bg-[#070b12] text-gray-100 min-h-screen antialiased selection:bg-emerald-500 selection:text-black">
 
     <!-- Top Navigation Header -->
     <header class="sticky top-0 z-50 glass-panel border-b border-gray-800/80">
@@ -1117,17 +1117,9 @@
                 </div>
             </div>
 
-            <!-- Demo Account Credentials -->
-            <div class="mt-6 pt-4 border-t border-gray-800 flex flex-wrap items-center justify-between gap-4 text-xs text-gray-400">
-                <div>
-                    <span class="font-bold text-gray-200">Akun Sandbox (Password: <code>password</code>):</span>
-                    <span class="ml-2 font-mono text-emerald-400">admin@motovault.test</span> (Admin) |
-                    <span class="font-mono text-cyan-400">staff@motovault.test</span> (Kasir) |
-                    <span class="font-mono text-amber-400">customer@motovault.test</span> (User)
-                </div>
-                <div class="text-gray-500 font-mono">
-                    MotoVault Enterprise Engine • Laravel 11/12
-                </div>
+            <!-- API Version Footer -->
+            <div class="mt-6 pt-4 border-t border-gray-800 text-right text-xs text-gray-500 font-mono">
+                MotoVault Enterprise Engine • Laravel 12
             </div>
         </div>
     </section>
@@ -2578,28 +2570,7 @@
 
                 <!-- TAB 1: LOGIN FORM -->
                 <form x-show="$store.auth.authTab === 'login'" @submit.prevent="submitAuthLogin()" class="space-y-3.5">
-                    <!-- Quick 1-Click Demo Logins -->
-                    <div class="p-3 bg-gray-950/90 rounded-2xl border border-gray-800 text-[11px] space-y-2">
-                        <div class="font-bold text-gray-300 flex items-center justify-between">
-                            <span>💡 Login Cepat Akun Demo (1-Click):</span>
-                        </div>
-                        <div class="grid grid-cols-2 gap-2">
-                            <button 
-                                type="button"
-                                @click="$store.auth.loginEmail = 'customer@motovault.test'; $store.auth.loginPassword = 'password'; submitAuthLogin()"
-                                class="p-2 rounded-xl bg-gray-900 hover:bg-emerald-500/20 border border-gray-700/80 hover:border-emerald-500/50 text-left transition cursor-pointer">
-                                <div class="font-bold text-emerald-400">👤 Pembeli (Customer)</div>
-                                <div class="text-[10px] text-gray-400 font-mono truncate">customer@motovault.test</div>
-                            </button>
-                            <button 
-                                type="button"
-                                @click="$store.auth.loginEmail = 'admin@motovault.test'; $store.auth.loginPassword = 'password'; submitAuthLogin()"
-                                class="p-2 rounded-xl bg-gray-900 hover:bg-cyan-500/20 border border-gray-700/80 hover:border-cyan-500/50 text-left transition cursor-pointer">
-                                <div class="font-bold text-cyan-400">⚡ Super Admin</div>
-                                <div class="text-[10px] text-gray-400 font-mono truncate">admin@motovault.test</div>
-                            </button>
-                        </div>
-                    </div>
+
 
                     <div>
                         <label class="block text-xs font-bold text-gray-300 mb-1">Email <span class="text-rose-400">*</span></label>
@@ -3235,12 +3206,13 @@
                 // Ensure authentication token exists (auto-register if guest)
                 let token = auth.token;
                 if (!token) {
+                    const autoPass = 'Mv$' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
                     const regPayload = {
                         name: (cart.recipientName || 'Pelanggan MotoVault').trim(),
                         email: (cart.recipientEmail || '').trim(),
                         phone: (cart.recipientPhone || '081234567890').trim(),
-                        password: 'Password123!',
-                        password_confirmation: 'Password123!'
+                        password: autoPass,
+                        password_confirmation: autoPass
                     };
 
                     const regRes = await fetch('/api/v1/auth/register', {
@@ -3258,25 +3230,7 @@
                         auth.setAuth(regJson.data.token, regJson.data.user);
                         token = regJson.data.token;
                     } else if (regJson.errors?.email || (regJson.message && regJson.message.toLowerCase().includes('sudah terdaftar'))) {
-                        // Email already registered: attempt fallback login with default password
-                        const loginRes = await fetch('/api/v1/auth/login', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'Accept': 'application/json'
-                            },
-                            body: JSON.stringify({
-                                email: regPayload.email,
-                                password: 'Password123!'
-                            })
-                        });
-                        const loginJson = await loginRes.json();
-                        if (loginRes.ok && loginJson.success && loginJson.data?.token) {
-                            auth.setAuth(loginJson.data.token, loginJson.data.user);
-                            token = loginJson.data.token;
-                        } else {
-                            throw new Error('Email ' + regPayload.email + ' telah terdaftar dengan password lain. Silakan login terlebih dahulu melalui tombol Masuk di menu atas.');
-                        }
+                        throw new Error('Email ' + regPayload.email + ' telah terdaftar. Silakan login terlebih dahulu melalui tombol Masuk di menu atas.');
                     } else {
                         const errMsg = regJson.errors 
                             ? Object.values(regJson.errors).flat().join(', ') 
@@ -3361,7 +3315,7 @@
                         alert('Pembayaran gagal atau dibatalkan.');
                     },
                     onClose: function() {
-                        console.log('Customer menutup jendela popup Snap tanpa menyelesaikan pembayaran.');
+                        // User closed Snap popup
                     }
                 });
             } else if (redirectUrl) {

@@ -22,7 +22,7 @@ class MidtransService
     public function createSnapTransaction(Order $order): array
     {
         $serverKey = config('services.midtrans.server_key');
-        $clientKey = config('services.midtrans.client_key', 'SB-Mid-client-demo');
+        $clientKey = config('services.midtrans.client_key');
 
         // Jika server key belum disetel, gunakan fallback mock mode
         if (blank($serverKey)) {
@@ -166,7 +166,7 @@ class MidtransService
             'customer_details' => [
                 'first_name' => $firstName,
                 'last_name' => $lastName,
-                'email' => $user?->email ?? 'customer@motovault.test',
+                'email' => $user?->email ?? 'noreply@motovault.id',
                 'phone' => $user?->phone ?? '081200000000',
                 'shipping_address' => [
                     'first_name' => $firstName,
@@ -191,7 +191,7 @@ class MidtransService
 
         return [
             'snap_token' => $token,
-            'redirect_url' => "https://app.sandbox.midtrans.com/snap/v2/vtweb/{$token}",
+            'redirect_url' => (config('services.midtrans.is_production') ? "https://app.midtrans.com" : "https://app.sandbox.midtrans.com") . "/snap/v2/vtweb/{$token}",
             'client_key' => $clientKey,
             'is_mock' => true,
         ];

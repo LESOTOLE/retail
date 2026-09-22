@@ -35,11 +35,13 @@ class UserSeeder extends Seeder
             ],
         ];
 
+        $defaultPassword = env('SEED_DEFAULT_PASSWORD', app()->isProduction() ? \Illuminate\Support\Str::random(24) : 'password');
+
         foreach ($users as $data) {
             $user = User::updateOrCreate(
                 ['email' => $data['email']],
                 array_merge($data, [
-                    'password' => Hash::make('password'),
+                    'password' => Hash::make($defaultPassword),
                     'email_verified_at' => now(),
                 ])
             );

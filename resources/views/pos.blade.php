@@ -620,14 +620,14 @@
             btn.innerHTML = '<span>Memproses Pembayaran...</span>';
 
             try {
-                // Authenticate staff cashier
-                const authRes = await fetch('/api/v1/auth/login', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-                    body: JSON.stringify({ email: 'staff@motovault.test', password: 'password' })
-                });
-                const authJson = await authRes.json();
-                const token = authJson.data?.token;
+                // Check for auth token
+                const token = localStorage.getItem('motovault_admin_token') || localStorage.getItem('motovault_pos_token');
+                
+                if (!token) {
+                    alert('Silakan login terlebih dahulu sebagai Staff/Admin untuk menggunakan POS.');
+                    window.location.href = '/';
+                    return;
+                }
 
                 const payload = {
                     customer_name: customerName,
@@ -868,7 +868,7 @@
                     osc2.start(now + 0.12);
                     osc2.stop(now + 0.55);
                 } catch (e) {
-                    console.warn('Web Audio error:', e);
+                    // console.warn('Web Audio error:', e);
                 }
             },
 
@@ -893,7 +893,7 @@
                     osc.start(now);
                     osc.stop(now + 0.4);
                 } catch (e) {
-                    console.warn('Web Audio error:', e);
+                    // console.warn('Web Audio error:', e);
                 }
             }
         };
@@ -1089,7 +1089,7 @@
                         });
 
                 } catch (err) {
-                    console.warn('Reverb WebSocket init error, falling back to polling:', err);
+                    // console.warn('Reverb WebSocket init error, falling back to polling:', err);
                     updateConnectionBadge('fallback');
                     startFallbackPolling();
                 }
@@ -1174,7 +1174,7 @@
                     showPosToast('Pesanan Baru Terdeteksi', 'Ada transaksi online baru yang tercatat di sistem.', 'order');
                 }
             } catch (err) {
-                console.warn('Fallback polling error:', err);
+                // console.warn('Fallback polling error:', err);
             }
         }
 
