@@ -1,3 +1,12 @@
+@php
+    /**
+     * @var \Illuminate\Database\Eloquent\Collection<int, \App\Models\Vehicle> $vehicles
+     * @var \Illuminate\Database\Eloquent\Collection<int, \App\Models\Category> $categories
+     * @var \Illuminate\Database\Eloquent\Collection<int, \App\Models\Warehouse> $warehouses
+     * @var \Illuminate\Database\Eloquent\Collection<int, \App\Models\Product> $products
+     * @var array{vehicles_count: int, products_count: int, categories_count: int, warehouses_count: int} $stats
+     */
+@endphp
 <!DOCTYPE html>
 <html lang="id" class="dark scroll-smooth">
 <head>
@@ -52,7 +61,11 @@
     <script src="https://js.pusher.com/8.2.0/pusher.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/laravel-echo@1.16.1/dist/echo.iife.js"></script>
     <!-- Midtrans Snap JS -->
-    <script src="{{ config('services.midtrans.is_production') ? 'https://app.midtrans.com/snap/snap.js' : 'https://app.sandbox.midtrans.com/snap/snap.js' }}" data-client-key="{{ config('services.midtrans.client_key') }}"></script>
+    @if(config('services.midtrans.is_production'))
+        <script src="https://app.midtrans.com/snap/snap.js" data-client-key="{{ config('services.midtrans.client_key') }}"></script>
+    @else
+        <script src="https://app.sandbox.midtrans.com/snap/snap.js" data-client-key="{{ config('services.midtrans.client_key') }}"></script>
+    @endif
     <script>
         document.addEventListener('alpine:init', () => {
             // Helper for safe JSON localStorage retrieval
@@ -285,10 +298,10 @@
                 try {
                     window.storeEcho = new Echo({
                         broadcaster: 'reverb',
-                        key: '{{ config('broadcasting.connections.reverb.key', 'motovault-key') }}',
+                        key: @json(config('broadcasting.connections.reverb.key', 'motovault-key')),
                         wsHost: window.location.hostname || '127.0.0.1',
-                        wsPort: {{ config('broadcasting.connections.reverb.options.port', 8080) }},
-                        wssPort: {{ config('broadcasting.connections.reverb.options.port', 8080) }},
+                        wsPort: @json(config('broadcasting.connections.reverb.options.port', 8080)),
+                        wssPort: @json(config('broadcasting.connections.reverb.options.port', 8080)),
                         forceTLS: false,
                         enabledTransports: ['ws', 'wss'],
                     });
