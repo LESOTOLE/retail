@@ -455,6 +455,11 @@
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
                     </svg>
                 </a>
+
+                <!-- Admin Console Button -->
+                <a href="/admin" target="_blank" class="px-2.5 sm:px-3 py-2 rounded-xl bg-gray-900 border border-gray-700 hover:border-gray-500 text-gray-200 text-xs font-bold transition flex items-center space-x-1.5 active:scale-95" title="Buka Admin Console">
+                    <span>⚙️ <span class="hidden md:inline">Admin</span></span>
+                </a>
             </div>
         </div>
     </header>

@@ -35,3 +35,19 @@ Route::get('/pos', function () {
 
 Route::get('/pos/reports/sales/export', [\App\Http\Controllers\Api\V1\Admin\SalesReportController::class, 'exportCsv'])->name('pos.reports.sales.export');
 
+Route::get('/admin', function () {
+    $categories = Category::orderBy('name')->get();
+    $warehouses = Warehouse::where('is_active', true)->orderBy('name')->get();
+    $vehicles = Vehicle::orderBy('brand')->orderBy('model')->get();
+    
+    $stats = [
+        'products_count' => Product::count(),
+        'orders_count' => \App\Models\Order::count(),
+        'low_stock_count' => ProductVariant::whereColumn('stock', '<=', 'min_stock_alert')->count(),
+        'transfers_count' => \App\Models\StockTransfer::where('status', 'dispatched')->count(),
+    ];
+
+    return view('admin.index', compact('categories', 'warehouses', 'vehicles', 'stats'));
+})->name('admin.index');
+
+
