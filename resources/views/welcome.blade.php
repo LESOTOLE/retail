@@ -364,8 +364,6 @@
                                 <a href="#katalog-produk" class="hover:text-emerald-400 transition">Katalog Terverifikasi</a>
                                 <a href="#ai-diagnostic" class="hover:text-emerald-400 transition">AI Diagnosa RAG</a>
                                 <a href="#logistik-3pl" class="hover:text-emerald-400 transition">3PL Cek Ongkir & Resi</a>
-                                <a href="#gudang-cabang" class="hover:text-emerald-400 transition">Routing Cabang</a>
-                                <a href="#api-reference" class="hover:text-emerald-400 transition">REST API Docs</a>
                                 <button
                                     type="button"
                                     @click="$store.cart.isOrderTrackerOpen = true; fetchCustomerOrders()"
@@ -1026,136 +1024,7 @@
                         </div>
                     </section>
 
-                    <!-- SECTION 3: MULTI-WAREHOUSE PROXIMITY & GEOLOCATION -->
-                    <section id="gudang-cabang" class="py-12 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto border-t border-gray-800/80">
-                        <div class="mb-8 text-center max-w-xl mx-auto">
-                            <h2 class="text-2xl sm:text-3xl font-extrabold text-white">Jaringan Cabang & Proximity Routing</h2>
-                            <p class="text-xs sm:text-sm text-gray-400 mt-1">Pemenuhan pesanan dari gudang terdekat menggunakan rumus Geodesic Haversine.</p>
-                        </div>
 
-                        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-                            <div class="lg:col-span-7 glass-panel rounded-3xl p-6 border border-gray-800 shadow-xl">
-                                <label class="block text-xs text-gray-400 mb-2 font-semibold">Simulasi Titik Geolocation Pelanggan:</label>
-                                <div class="grid grid-cols-3 gap-2 mb-4">
-                                    <button onclick="setCoordinates(-6.2088, 106.8456, 'Jakarta')" class="px-3 py-2 rounded-xl bg-gray-900 border border-gray-800 hover:border-emerald-500 text-xs text-left transition">
-                                        <div class="font-bold text-white">📍 Jakarta</div>
-                                        <div class="text-[10px] text-gray-500 font-mono">-6.208, 106.845</div>
-                                    </button>
-                                    <button onclick="setCoordinates(-6.9024, 107.6186, 'Bandung')" class="px-3 py-2 rounded-xl bg-gray-900 border border-gray-800 hover:border-emerald-500 text-xs text-left transition">
-                                        <div class="font-bold text-white">📍 Bandung</div>
-                                        <div class="text-[10px] text-gray-500 font-mono">-6.902, 107.618</div>
-                                    </button>
-                                    <button onclick="setCoordinates(-7.2575, 112.7521, 'Surabaya')" class="px-3 py-2 rounded-xl bg-gray-900 border border-gray-800 hover:border-emerald-500 text-xs text-left transition">
-                                        <div class="font-bold text-white">📍 Surabaya</div>
-                                        <div class="text-[10px] text-gray-500 font-mono">-7.257, 112.752</div>
-                                    </button>
-                                </div>
-
-                                <div class="grid grid-cols-2 gap-3 mb-4">
-                                    <div>
-                                        <label class="block text-[11px] text-gray-400 mb-1">Latitude:</label>
-                                        <input type="text" id="geo-lat" value="-6.9024" class="w-full bg-gray-900 border border-gray-700 rounded-xl px-3 py-2 text-xs text-gray-200 font-mono">
-                                    </div>
-                                    <div>
-                                        <label class="block text-[11px] text-gray-400 mb-1">Longitude:</label>
-                                        <input type="text" id="geo-lng" value="107.6186" class="w-full bg-gray-900 border border-gray-700 rounded-xl px-3 py-2 text-xs text-gray-200 font-mono">
-                                    </div>
-                                </div>
-
-                                <button onclick="checkWarehouseRouting()" class="w-full py-2.5 bg-cyan-500 hover:bg-cyan-400 text-black font-extrabold rounded-xl text-xs transition mb-4">
-                                    Hitung Jarak & Rute Cabang Optimal
-                                </button>
-
-                                <div id="warehouse-routing-result" class="space-y-2 max-h-[260px] overflow-y-auto pr-1">
-                                    <div class="text-center py-6 text-gray-500 text-xs">Pilih lokasi di atas untuk melihat alokasi cabang terdekat.</div>
-                                </div>
-                            </div>
-
-                            <!-- Warehouses List -->
-                            <div class="lg:col-span-5 glass-panel rounded-3xl p-6 border border-gray-800 shadow-xl">
-                                <h3 class="text-sm font-bold text-white pb-3 border-b border-gray-800 mb-3">Daftar Gudang Cabang Aktif</h3>
-                                <div class="space-y-3">
-                                    @forelse($warehouses as $wh)
-                                    <div class="bg-gray-900/90 border border-gray-800 p-3.5 rounded-2xl">
-                                        <div class="flex items-start justify-between">
-                                            <div>
-                                                <div class="flex items-center space-x-2">
-                                                    <span class="text-xs font-bold text-white">{{ $wh->name }}</span>
-                                                    @if($wh->is_central)
-                                                    <span class="px-2 py-0.2 rounded text-[9px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30">Pusat</span>
-                                                    @endif
-                                                </div>
-                                                <div class="text-[11px] text-gray-400 mt-1">{{ $wh->address }}, {{ $wh->city }} {{ $wh->postal_code }}</div>
-                                            </div>
-                                            <span class="text-[10px] font-mono font-bold text-emerald-400">{{ $wh->code }}</span>
-                                        </div>
-                                    </div>
-                                    @empty
-                                    <div class="text-center py-6 text-gray-500 text-xs">Belum ada cabang terdaftar.</div>
-                                    @endforelse
-                                </div>
-                            </div>
-                        </div>
-                    </section>
-
-                    <!-- SECTION 4: REST API REFERENCE & DOCUMENTATION -->
-                    <section id="api-reference" class="py-12 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto border-t border-gray-800/80">
-                        <div class="glass-panel rounded-3xl p-6 sm:p-8 border border-gray-800 shadow-2xl">
-                            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-gray-800">
-                                <div>
-                                    <h3 class="text-lg font-extrabold text-white">REST API Architecture & Sandbox</h3>
-                                    <p class="text-xs text-gray-400 mt-0.5">Teruji 100% pada 43 endpoint untuk integrasi Web, Mobile App, dan Kasir POS.</p>
-                                </div>
-                                <div class="flex items-center space-x-2 text-xs">
-                                    <span class="px-2.5 py-1 rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/20 font-mono">Accept: application/json</span>
-                                    <span class="px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-mono">Content-Type: application/json</span>
-                                </div>
-                            </div>
-
-                            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
-                                <div class="bg-gray-900/80 p-4 rounded-2xl border border-gray-800">
-                                    <div class="flex items-center justify-between mb-2">
-                                        <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-green-500/20 text-green-400">GET</span>
-                                        <span class="text-xs text-gray-500 font-mono">Public</span>
-                                    </div>
-                                    <div class="text-xs font-mono text-gray-200 font-bold mb-1">/api/v1/products</div>
-                                    <p class="text-xs text-gray-400">Katalog suku cadang dengan filter <code>vehicle_id</code>, harga, dan kategori.</p>
-                                </div>
-
-                                <div class="bg-gray-900/80 p-4 rounded-2xl border border-gray-800">
-                                    <div class="flex items-center justify-between mb-2">
-                                        <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-500/20 text-blue-400">POST</span>
-                                        <span class="text-xs text-gray-500 font-mono">Public</span>
-                                    </div>
-                                    <div class="text-xs font-mono text-gray-200 font-bold mb-1">/api/v1/ai/chat/stream</div>
-                                    <p class="text-xs text-gray-400">Server-Sent Events streaming konsultasi AI & diagnosa RAG.</p>
-                                </div>
-
-                                <div class="bg-gray-900/80 p-4 rounded-2xl border border-gray-800">
-                                    <div class="flex items-center justify-between mb-2">
-                                        <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-500/20 text-blue-400">POST</span>
-                                        <span class="text-xs text-gray-500 font-mono">Public</span>
-                                    </div>
-                                    <div class="text-xs font-mono text-gray-200 font-bold mb-1">/api/v1/shipping/rates</div>
-                                    <p class="text-xs text-gray-400">Tarif ongkir multi-kurir real-time (JNE, J&T, SiCepat, GoSend).</p>
-                                </div>
-
-                                <div class="bg-gray-900/80 p-4 rounded-2xl border border-gray-800">
-                                    <div class="flex items-center justify-between mb-2">
-                                        <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-400">POST</span>
-                                        <span class="text-xs text-gray-500 font-mono">Staff / Admin</span>
-                                    </div>
-                                    <div class="text-xs font-mono text-gray-200 font-bold mb-1">/api/v1/pos/orders</div>
-                                    <p class="text-xs text-gray-400">Transaksi kasir langsung toko fisik dengan pemotongan stok atomik.</p>
-                                </div>
-                            </div>
-
-                            <!-- API Version Footer -->
-                            <div class="mt-6 pt-4 border-t border-gray-800 text-right text-xs text-gray-500 font-mono">
-                                MotoVault Enterprise Engine • Laravel 12
-                            </div>
-                        </div>
-                    </section>
 
                     <!-- Footer -->
                     <footer class="border-t border-gray-800/80 py-8 px-4 text-center text-xs text-gray-500">
@@ -2745,7 +2614,6 @@
                         document.addEventListener('DOMContentLoaded', () => {
                             loadProducts();
                             calculateShippingRates();
-                            checkWarehouseRouting();
                         });
 
                         // 1. Catalog Loader
@@ -3081,75 +2949,7 @@
                             }
                         }
 
-                        // 5. Warehouse Geolocation Routing
-                        function setCoordinates(lat, lng, label) {
-                            document.getElementById('geo-lat').value = lat;
-                            document.getElementById('geo-lng').value = lng;
-                            checkWarehouseRouting();
-                        }
-
-                        async function checkWarehouseRouting() {
-                            const lat = parseFloat(document.getElementById('geo-lat')?.value) || -6.9024;
-                            const lng = parseFloat(document.getElementById('geo-lng')?.value) || 107.6186;
-                            const container = document.getElementById('warehouse-routing-result');
-                            if (!container) return;
-
-                            container.innerHTML = '<div class="text-center py-6 text-gray-500 text-xs">Menghitung jarak ke cabang...</div>';
-
-                            try {
-                                const res = await fetch('/api/v1/warehouses/route-nearest', {
-                                    method: 'POST',
-                                    headers: {
-                                        'Content-Type': 'application/json',
-                                        'Accept': 'application/json'
-                                    },
-                                    body: JSON.stringify({
-                                        latitude: lat,
-                                        longitude: lng,
-                                        items: [{
-                                            sku: 'DAY-RLR-11G',
-                                            quantity: 2
-                                        }]
-                                    })
-                                });
-                                const json = await res.json();
-
-                                if (!json.success || !json.data) {
-                                    container.innerHTML = '<div class="text-center py-6 text-gray-500 text-xs">Gagal menghitung rute.</div>';
-                                    return;
-                                }
-
-                                const bestWh = json.data.warehouse;
-                                const alts = json.data.alternatives || [];
-
-                                container.innerHTML = `
-                    <div class="bg-emerald-950/40 border border-emerald-500/40 p-4 rounded-2xl mb-3">
-                        <div class="flex items-center justify-between">
-                            <div>
-                                <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500 text-black uppercase">Cabang Terpilih</span>
-                                <h3 class="text-sm font-bold text-white mt-1">${bestWh.name}</h3>
-                                <p class="text-xs text-gray-300">${bestWh.city} • Jarak: <b class="text-emerald-400">${bestWh.distance_km} km</b></p>
-                            </div>
-                            <span class="text-xs font-mono font-bold text-emerald-400">${bestWh.code}</span>
-                        </div>
-                    </div>
-                    <div class="text-[11px] font-bold text-gray-400 uppercase mt-3 mb-1">Jarak Seluruh Cabang:</div>
-                    ${alts.map(a => `
-                        <div class="bg-gray-900/90 border border-gray-800 p-2.5 rounded-xl flex items-center justify-between text-xs">
-                            <div>
-                                <div class="font-bold text-gray-200">${a.warehouse.name}</div>
-                                <div class="text-[10px] text-gray-400">${a.warehouse.city} • Stok: ${a.has_full_stock ? '<b class="text-emerald-400">Lengkap</b>' : '<b class="text-amber-400">Parsial</b>'}</div>
-                            </div>
-                            <span class="font-mono font-bold text-cyan-400">${a.distance_km} km</span>
-                        </div>
-                    `).join('')}
-                `;
-                            } catch (err) {
-                                container.innerHTML = `<div class="text-center py-6 text-rose-500 text-xs">Error: ${err.message}</div>`;
-                            }
-                        }
-
-                        // 6. Checkout Flow: Fetch Live 3PL Shipping Rates
+                        // 5. Checkout Flow: Fetch Live 3PL Shipping Rates
                         async function fetchShippingRatesForCheckout() {
                             const cart = Alpine.store('cart');
 
