@@ -8,22 +8,24 @@ use App\Http\Requests\Api\V1\CartValidateRequest;
 use App\Http\Resources\OrderResource;
 use App\Models\Order;
 use App\Services\CheckoutService;
+use App\Services\Payment\MidtransService;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response as HttpResponse;
 
 /**
- * Transaksi & Checkout (PRD 6.3).
+ * Transaksi & Checkout (PRD 6.3 & Spec 2026-09-21).
  */
 class OrderController extends Controller
 {
     public function __construct(
-        protected CheckoutService $checkout
+        protected CheckoutService $checkout,
+        protected MidtransService $midtrans
     ) {}
 
     /**
-     * POST /api/v1/orders/checkout - Membuat invoice pesanan & mengunci stok.
+     * POST /api/v1/orders/checkout - Membuat invoice pesanan, mengunci stok, & menerbitkan Midtrans Snap payload.
      */
     public function checkout(CartValidateRequest $request): JsonResponse
     {
@@ -37,6 +39,7 @@ class OrderController extends Controller
                 'payment_method',
             ]);
             $order = $this->checkout->checkout($request->user(), $request->cartItems(), $shippingData);
+            $paymentPayload = $this->midtrans->createSnapTransaction($order);
         } catch (InsufficientStockException $e) {
             return response()->json([
                 'success' => false,
@@ -46,8 +49,11 @@ class OrderController extends Controller
             ], HttpResponse::HTTP_CONFLICT);
         }
 
+        $orderData = (new OrderResource($order))->resolve($request);
+        $orderData['payment_payload'] = $paymentPayload;
+
         return ApiResponse::created(
-            new OrderResource($order),
+            $orderData,
             'Pesanan berhasil dibuat, silakan lanjutkan pembayaran'
         );
     }

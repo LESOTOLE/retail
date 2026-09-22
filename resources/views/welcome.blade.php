@@ -48,6 +48,11 @@
 
     <!-- Alpine.js CDN -->
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.5/dist/cdn.min.js"></script>
+    <!-- Pusher JS & Laravel Echo CDN for Reverb WebSockets -->
+    <script src="https://js.pusher.com/8.2.0/pusher.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/laravel-echo@1.16.1/dist/echo.iife.js"></script>
+    <!-- Midtrans Snap JS (Sandbox) -->
+    <script src="https://app.sandbox.midtrans.com/snap/snap.js" data-client-key="{{ config('services.midtrans.client_key', 'SB-Mid-client-demo') }}"></script>
     <script>
         document.addEventListener('alpine:init', () => {
             // Helper for safe JSON localStorage retrieval
@@ -274,6 +279,31 @@
                     this.save();
                 }
             });
+
+            // --- REAL-TIME WEBSOCKET (REVERB) FOR STOREFRONT ---
+            if (typeof Echo !== 'undefined') {
+                try {
+                    window.storeEcho = new Echo({
+                        broadcaster: 'reverb',
+                        key: '{{ config('broadcasting.connections.reverb.key', 'motovault-key') }}',
+                        wsHost: window.location.hostname || '127.0.0.1',
+                        wsPort: {{ config('broadcasting.connections.reverb.options.port', 8080) }},
+                        wssPort: {{ config('broadcasting.connections.reverb.options.port', 8080) }},
+                        forceTLS: false,
+                        enabledTransports: ['ws', 'wss'],
+                    });
+
+                    window.storeEcho.channel('orders')
+                        .listen('.OrderStatusUpdated', (e) => {
+                            const cart = Alpine.store('cart');
+                            if (cart) {
+                                cart.showToast(`📢 Update Pesanan #${e.order_number}: Status ${e.payment_status === 'paid' ? 'LUNAS' : e.fulfillment_status}`);
+                            }
+                        });
+                } catch (e) {
+                    console.warn('Storefront Echo init notice:', e);
+                }
+            }
         });
     </script>
 </head>
@@ -2253,6 +2283,32 @@
                     </div>
                 </div>
 
+                <!-- Midtrans Snap Online Payment Card (When snap_token exists) -->
+                <template x-if="$store.cart.checkoutSuccessData?.payment_payload?.snap_token">
+                    <div class="p-4 rounded-2xl bg-gradient-to-r from-emerald-500/15 via-teal-500/15 to-cyan-500/15 border border-emerald-500/40 text-center space-y-3">
+                        <div class="flex items-center justify-center space-x-1.5 text-xs font-bold text-emerald-300">
+                            <span>🛡️</span>
+                            <span>Midtrans Snap Payment Gateway (Resmi)</span>
+                        </div>
+                        <p class="text-[11px] text-gray-300">
+                            Bayar instan dengan QRIS, GoPay, OVO, ShopeePay, Virtual Account BCA/Mandiri/BRI/BNI via gateway terenkripsi.
+                        </p>
+                        <button 
+                            type="button" 
+                            @click="payWithSnap($store.cart.checkoutSuccessData.payment_payload.snap_token, $store.cart.checkoutSuccessData.payment_payload.redirect_url)"
+                            class="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-black font-black text-xs shadow-lg shadow-emerald-500/25 active:scale-95 transition flex items-center justify-center space-x-2 cursor-pointer">
+                            <span>💳</span>
+                            <span>Bayar Sekarang (Snap Gateway) &rarr;</span>
+                        </button>
+                        <div class="text-[10px] text-gray-400">
+                            Atau buka tab pembayaran: 
+                            <a :href="$store.cart.checkoutSuccessData.payment_payload.redirect_url" target="_blank" class="text-emerald-400 underline font-semibold hover:text-emerald-300">
+                                Buka Link Pembayaran &rarr;
+                            </a>
+                        </div>
+                    </div>
+                </template>
+
                 <!-- Dynamic Payment Instructions based on payment method -->
                 <!-- 1. QRIS Payment Visual -->
                 <div 
@@ -3274,6 +3330,39 @@
                 cart.checkoutError = err.message;
             } finally {
                 cart.isCheckingOut = false;
+            }
+        }
+
+        // 7.1 Midtrans Snap Payment Trigger
+        function payWithSnap(snapToken, redirectUrl) {
+            if (!snapToken) {
+                if (redirectUrl) window.open(redirectUrl, '_blank');
+                return;
+            }
+
+            if (window.snap && typeof window.snap.pay === 'function') {
+                window.snap.pay(snapToken, {
+                    onSuccess: function(result) {
+                        alert('Pembayaran berhasil dikonfirmasi oleh sistem!');
+                        Alpine.store('cart').isOrderSuccessOpen = false;
+                        if (window.fetchCustomerOrders) window.fetchCustomerOrders();
+                    },
+                    onPending: function(result) {
+                        alert('Menunggu penyelesaian pembayaran.');
+                        Alpine.store('cart').isOrderSuccessOpen = false;
+                        if (window.fetchCustomerOrders) window.fetchCustomerOrders();
+                    },
+                    onError: function(result) {
+                        alert('Pembayaran gagal atau dibatalkan.');
+                    },
+                    onClose: function() {
+                        console.log('Customer menutup jendela popup Snap tanpa menyelesaikan pembayaran.');
+                    }
+                });
+            } else if (redirectUrl) {
+                window.open(redirectUrl, '_blank');
+            } else {
+                alert('Midtrans Snap SDK sedang dimuat. Silakan gunakan link pembayaran alternatif.');
             }
         }
 

@@ -50,14 +50,21 @@ class ApiResponse
     public static function error(
         string $message = 'Something went wrong',
         mixed $errors = null,
-        int $status = HttpResponse::HTTP_BAD_REQUEST
+        int $status = HttpResponse::HTTP_BAD_REQUEST,
+        ?string $errorCode = null
     ): JsonResponse {
-        return response()->json([
+        $payload = [
             'success' => false,
             'message' => $message,
             'data' => null,
             'errors' => $errors,
-        ], $status);
+        ];
+
+        if ($errorCode !== null) {
+            $payload['error_code'] = $errorCode;
+        }
+
+        return response()->json($payload, $status);
     }
 
     /**

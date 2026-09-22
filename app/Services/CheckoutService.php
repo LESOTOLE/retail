@@ -8,6 +8,8 @@ use App\Exceptions\InsufficientStockException;
 use App\Models\Order;
 use App\Models\ShippingOrder;
 use App\Models\User;
+use App\Models\Warehouse;
+use App\Models\WarehouseStock;
 use App\Services\Shipping\ShippingRateService;
 use Illuminate\Support\Facades\DB;
 
@@ -22,7 +24,7 @@ class CheckoutService
 
     /**
      * Proses checkout: validasi stok dengan row lock, buat order + items,
-     * lalu kurangi stok dalam satu transaksi database.
+     * serta kurangi stok varian & stok gudang dalam satu transaksi database.
      *
      * @param  array<string, int>  $items  [sku => quantity]
      * @param  array<string, mixed>  $shippingData
@@ -41,9 +43,21 @@ class CheckoutService
             $shippingCost = (float) ($shippingData['shipping_cost'] ?? 0);
             $totalAmount = (float) $result['total_amount'] + $shippingCost;
 
+            // Resolusi Gudang Asal Pengiriman / Penjualan (Multi-Warehouse Proximity)
+            $warehouseId = $shippingData['warehouse_id'] ?? null;
+            $warehouse = null;
+            if ($warehouseId) {
+                $warehouse = Warehouse::find($warehouseId);
+            }
+            if (! $warehouse) {
+                $warehouse = Warehouse::where('is_central', true)->first()
+                    ?? Warehouse::where('is_active', true)->first();
+            }
+
             $order = Order::create([
                 'order_number' => Order::generateOrderNumber(),
                 'user_id' => $user->id,
+                'warehouse_id' => $warehouse?->id,
                 'total_amount' => $totalAmount,
                 'payment_status' => PaymentStatus::Unpaid,
                 'fulfillment_status' => FulfillmentStatus::Pending,
@@ -57,7 +71,7 @@ class CheckoutService
                     'courier_code' => $shippingData['courier_code'],
                     'courier_service' => $shippingData['courier_service'] ?? 'REG',
                     'shipping_cost' => $shippingCost,
-                    'origin_postal_code' => ShippingRateService::DEFAULT_ORIGIN_POSTAL_CODE,
+                    'origin_postal_code' => $warehouse?->postal_code ?? ShippingRateService::DEFAULT_ORIGIN_POSTAL_CODE,
                     'destination_postal_code' => $shippingData['destination_postal_code'] ?? '00000',
                     'destination_address' => $shippingData['shipping_address'] ?? null,
                     'tracking_status' => 'PENDING',
@@ -78,6 +92,19 @@ class CheckoutService
 
                 if ($variant) {
                     $this->inventory->decrementStock($variant, $line['quantity']);
+
+                    // Sinkronisasi stok spesifik cabang gudang (WarehouseStock)
+                    if ($warehouse) {
+                        $whStock = WarehouseStock::where('warehouse_id', $warehouse->id)
+                            ->where('product_variant_id', $variant->id)
+                            ->lockForUpdate()
+                            ->first();
+
+                        if ($whStock) {
+                            $whStock->decrement('stock', $line['quantity']);
+                        }
+                    }
+
                     $freshVariant = $variant->fresh();
                     if ($freshVariant && $freshVariant->needs_restock) {
                         event(new \App\Events\LowStockAlertEvent($freshVariant));
@@ -85,7 +112,7 @@ class CheckoutService
                 }
             }
 
-            $order = $order->load(['items.variant.product', 'user']);
+            $order = $order->load(['items.variant.product', 'user', 'warehouse']);
 
             event(new \App\Events\OrderCreatedEvent($order));
 
@@ -118,7 +145,7 @@ class CheckoutService
     }
 
     /**
-     * Membatalkan order & mengembalikan stok yang sebelumnya dikunci.
+     * Membatalkan order & mengembalikan stok varian dan stok gudang yang sebelumnya dikunci.
      */
     public function cancel(Order $order, PaymentStatus $paymentStatus = PaymentStatus::Failed): Order
     {
@@ -133,6 +160,18 @@ class CheckoutService
                 if ($item->variant) {
                     $this->inventory->incrementStock($item->variant, $item->quantity);
                 }
+
+                // Pulihkan stok cabang gudang asal jika ada
+                if ($order->warehouse_id && $item->product_variant_id) {
+                    $whStock = WarehouseStock::where('warehouse_id', $order->warehouse_id)
+                        ->where('product_variant_id', $item->product_variant_id)
+                        ->lockForUpdate()
+                        ->first();
+
+                    if ($whStock) {
+                        $whStock->increment('stock', $item->quantity);
+                    }
+                }
             }
 
             $order->forceFill([
@@ -144,5 +183,31 @@ class CheckoutService
 
             return $order;
         });
+    }
+
+    /**
+     * Membatalkan seluruh pesanan berstatus unpaid yang melebihi batas waktu toleransi (TTL 30 menit)
+     * dan mengembalikan kuantitas stok varian secara atomik (PRD 4.2).
+     *
+     * @return int Jumlah pesanan yang berhasil dibatalkan
+     */
+    public function cancelExpiredOrders(int $ttlMinutes = 30): int
+    {
+        $threshold = now()->subMinutes($ttlMinutes);
+
+        $expiredOrders = Order::query()
+            ->where('payment_status', PaymentStatus::Unpaid)
+            ->where('fulfillment_status', '!=', FulfillmentStatus::Cancelled)
+            ->where('created_at', '<=', $threshold)
+            ->with('items.variant')
+            ->get();
+
+        $count = 0;
+        foreach ($expiredOrders as $order) {
+            $this->cancel($order, PaymentStatus::Expired);
+            $count++;
+        }
+
+        return $count;
     }
 }

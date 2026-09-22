@@ -30,6 +30,7 @@ class Order extends Model
     protected $fillable = [
         'order_number',
         'user_id',
+        'warehouse_id',
         'total_amount',
         'payment_status',
         'fulfillment_status',
@@ -84,6 +85,16 @@ class Order extends Model
     public function shippingOrder(): \Illuminate\Database\Eloquent\Relations\HasOne
     {
         return $this->hasOne(ShippingOrder::class);
+    }
+
+    /**
+     * Cabang gudang asal pemenuhan pesanan (Multi-Warehouse Inventory).
+     *
+     * @return \Illuminate\Database\Eloquent\Relations\BelongsTo<Warehouse, $this>
+     */
+    public function warehouse(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(Warehouse::class);
     }
 
     public function isPaid(): bool

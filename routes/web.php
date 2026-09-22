@@ -32,3 +32,6 @@ Route::get('/pos', function () {
 
     return view('pos', compact('categories', 'variants', 'warehouses'));
 })->name('pos.index');
+
+Route::get('/pos/reports/sales/export', [\App\Http\Controllers\Api\V1\Admin\SalesReportController::class, 'exportCsv'])->name('pos.reports.sales.export');
+

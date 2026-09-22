@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\CartController;
 use App\Http\Controllers\Api\V1\CategoryController;
 use App\Http\Controllers\Api\V1\HealthController;
+use App\Http\Controllers\Api\V1\NotificationController;
 use App\Http\Controllers\Api\V1\OrderController;
 use App\Http\Controllers\Api\V1\PaymentWebhookController;
 use App\Http\Controllers\Api\V1\Pos\PosOrderController;
@@ -29,8 +30,8 @@ Route::prefix('v1')->group(function () {
 
     // 6.1 Authentication & Profiles
     Route::prefix('auth')->group(function () {
-        Route::post('/register', [AuthController::class, 'register'])->name('api.v1.auth.register');
-        Route::post('/login', [AuthController::class, 'login'])->name('api.v1.auth.login');
+        Route::post('/register', [AuthController::class, 'register'])->middleware('throttle:auth')->name('api.v1.auth.register');
+        Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:auth')->name('api.v1.auth.login');
 
         Route::middleware('auth:sanctum')->group(function () {
             Route::post('/logout', [AuthController::class, 'logout'])->name('api.v1.auth.logout');
@@ -39,29 +40,32 @@ Route::prefix('v1')->group(function () {
     });
 
     // 6.2 Master Kendaraan & Kategori
-    Route::get('/vehicles', [VehicleController::class, 'index'])->name('api.v1.vehicles.index');
-    Route::get('/categories', [CategoryController::class, 'index'])->name('api.v1.categories.index');
+    Route::get('/vehicles', [VehicleController::class, 'index'])->middleware('throttle:catalog')->name('api.v1.vehicles.index');
+    Route::get('/categories', [CategoryController::class, 'index'])->middleware('throttle:catalog')->name('api.v1.categories.index');
 
     // 6.2 Katalog Produk & Detail
-    Route::get('/products', [ProductController::class, 'index'])->name('api.v1.products.index');
-    Route::get('/products/{slug}', [ProductController::class, 'show'])->name('api.v1.products.show');
+    Route::get('/products', [ProductController::class, 'index'])->middleware('throttle:catalog')->name('api.v1.products.index');
+    Route::get('/products/{slug}', [ProductController::class, 'show'])->middleware('throttle:catalog')->name('api.v1.products.show');
 
     // 6.3 Validasi Keranjang (Cart)
     Route::post('/cart/validate', [CartController::class, 'validateCart'])->name('api.v1.cart.validate');
 
     // 6.3 Transaksi & Pesanan Pelanggan (Customer)
     Route::middleware('auth:sanctum')->group(function () {
-        Route::post('/orders/checkout', [OrderController::class, 'checkout'])->name('api.v1.orders.checkout');
+        Route::post('/orders/checkout', [OrderController::class, 'checkout'])->middleware('throttle:checkout')->name('api.v1.orders.checkout');
         Route::get('/orders', [OrderController::class, 'index'])->name('api.v1.orders.index');
         Route::get('/orders/{order_number}', [OrderController::class, 'show'])->name('api.v1.orders.show');
     });
 
     // 6.4 AI Sales & Compatibility Assistant (Guest / Authenticated)
-    Route::post('/ai/chat', [AiChatController::class, 'chat'])->name('api.v1.ai.chat');
-    Route::post('/ai/chat/stream', [\App\Http\Controllers\Api\V1\AiStreamingChatController::class, 'stream'])->name('api.v1.ai.chat.stream');
+    Route::post('/ai/chat', [AiChatController::class, 'chat'])->middleware('throttle:ai-chat')->name('api.v1.ai.chat');
+    Route::post('/ai/chat/stream', [\App\Http\Controllers\Api\V1\AiStreamingChatController::class, 'stream'])->middleware('throttle:ai-chat')->name('api.v1.ai.chat.stream');
 
     // 6.6 Payment Gateway Callback Webhook (Idempotent)
-    Route::post('/webhooks/payment', [PaymentWebhookController::class, 'handle'])->name('api.v1.webhooks.payment');
+    Route::post('/webhooks/payment', [PaymentWebhookController::class, 'handle'])->middleware('throttle:webhook')->name('api.v1.webhooks.payment');
+
+    // 6.7 Real-Time Notifications & Fallback Polling (Reverb)
+    Route::get('/notifications/recent', [NotificationController::class, 'recent'])->middleware('throttle:catalog')->name('api.v1.notifications.recent');
 
     // 6.7 3PL Shipping Rates & Waybill Tracking (PRD Phase 2 - Feature 3)
     Route::post('/shipping/rates', [\App\Http\Controllers\Api\V1\ShippingController::class, 'rates'])->name('api.v1.shipping.rates');
@@ -95,6 +99,10 @@ Route::prefix('v1')->group(function () {
         Route::post('/warehouses/transfers', [\App\Http\Controllers\Api\V1\Admin\StockTransferAdminController::class, 'store'])->name('api.v1.admin.warehouses.transfers.store');
         Route::get('/warehouses/transfers/{id}', [\App\Http\Controllers\Api\V1\Admin\StockTransferAdminController::class, 'show'])->name('api.v1.admin.warehouses.transfers.show');
         Route::patch('/warehouses/transfers/{id}/status', [\App\Http\Controllers\Api\V1\Admin\StockTransferAdminController::class, 'updateStatus'])->name('api.v1.admin.warehouses.transfers.update_status');
+
+        // Sales Reports & CSV Export
+        Route::get('/reports/sales', [\App\Http\Controllers\Api\V1\Admin\SalesReportController::class, 'index'])->name('api.v1.admin.reports.sales.index');
+        Route::get('/reports/sales/export', [\App\Http\Controllers\Api\V1\Admin\SalesReportController::class, 'exportCsv'])->name('api.v1.admin.reports.sales.export');
     });
 
     // 6.8 Super Admin Only Operations (Admin)

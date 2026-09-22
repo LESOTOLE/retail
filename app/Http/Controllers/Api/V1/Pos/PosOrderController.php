@@ -33,7 +33,12 @@ class PosOrderController extends Controller
         $cashier = $request->user();
 
         try {
-            $order = $this->checkout->checkout($cashier, $request->cartItems());
+            $shippingData = [
+                'payment_method' => $request->validated('payment_method'),
+                'warehouse_id' => $request->validated('warehouse_id'),
+                'shipping_address' => 'POS In-Store: '.($request->validated('customer_name') ?? 'Pelanggan Toko'),
+            ];
+            $order = $this->checkout->checkout($cashier, $request->cartItems(), $shippingData);
         } catch (InsufficientStockException $e) {
             return response()->json([
                 'success' => false,

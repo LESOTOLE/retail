@@ -21,6 +21,7 @@ class PosOrderRequest extends FormRequest
     {
         return [
             'customer_name' => ['nullable', 'string', 'max:150'],
+            'warehouse_id' => ['nullable', 'integer', 'exists:warehouses,id'],
             'payment_method' => ['required', 'string', 'in:CASH,QRIS,DEBIT,TRANSFER'],
             'payment_reference' => ['nullable', 'string', 'max:100'],
             'items' => ['required', 'array', 'min:1'],
