@@ -82,39 +82,49 @@ Membeli suku cadang (*spare parts*), oli, aki, kampas rem, hingga aksesoris moto
 
 ```mermaid
 flowchart TD
-    subgraph Client Layer
-        A1["Storefront Web (Blade + Tailwind CSS v4)"]
+    subgraph ClientLayer["Client Layer"]
+        A1["Storefront Web (Blade & Tailwind)"]
         A2["POS Terminal Kasir (/pos)"]
         A3["Admin Console (/admin)"]
     end
 
-    subgraph Security & Gateway
-        B1["Laravel 12 API Gateway"]
-        B2["Named Rate Limiters (Throttling)"]
-        B3["Sanctum Token & Spatie RBAC Matrix"]
+    subgraph GatewayLayer["API Gateway & Security"]
+        B1["Laravel 12 REST API Gateway"]
+        B2["Named Rate Limiting (Throttling)"]
+        B3["Sanctum Auth & Spatie RBAC"]
     end
 
-    subgraph Application Services
-        C1["Compatibility Engine (Year-Brand-Model)"]
-        C2["Gemini AI Tool Calling & Diagnostic RAG"]
+    subgraph ServiceLayer["Core Application Services"]
+        C1["Deterministic Compatibility Engine"]
+        C2["Gemini AI Assistant & Diagnostic RAG"]
         C3["Omnichannel Checkout & Stock Guard"]
         C4["Multi-Warehouse Proximity Engine (Haversine)"]
-        C5["Midtrans & Xendit Payment Gateway (SHA-512)"]
+        C5["Midtrans & Xendit Gateway (SHA-512)"]
     end
 
-    subgraph Data & Real-time Layer
-        D1[("MySQL 8.0+ Primary DB")]
-        D2[("Redis Cache & Session")]
+    subgraph StorageLayer["Data & Real-time Layer"]
+        D1[("MySQL 8.0+ Database")]
+        D2[("Redis Cache & Queue")]
         D3["Laravel Reverb (WebSockets 8080)"]
     end
 
-    Client Layer --> B1
-    B1 --> B2 --> B3
-    B3 --> Application Services
-    Application Services --> D1
-    Application Services --> D2
-    Application Services -->|Broadcast Events| D3
-    D3 -.->|Live Push Alerts| Client Layer
+    A1 --> B1
+    A2 --> B1
+    A3 --> B1
+
+    B1 --> B2
+    B2 --> B3
+    B3 --> C1
+    B3 --> C2
+    B3 --> C3
+    B3 --> C4
+    B3 --> C5
+
+    C1 & C2 & C3 & C4 & C5 --> D1
+    C3 & C4 --> D2
+    C3 -->|Broadcast Events| D3
+    D3 -.->|Live Push Alerts| A1
+    D3 -.->|Live Push Alerts| A2
 ```
 
 ---
